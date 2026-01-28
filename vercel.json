@@ -1,16 +1,16 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/index.py", "use": "@vercel/python" }
+    { "src": "main.py", "use": "@vercel/python" }
   ],
   "functions": {
-    "api/index.py": {
+    "main.py": {
       "runtime": "python3.11",
       "maxDuration": 10,
       "memory": 1024
     }
   },
   "routes": [
-    { "src": "/(.*)", "dest": "/api/index.py" }
+    { "src": "/(.*)", "dest": "/main.py" }
   ]
 }
