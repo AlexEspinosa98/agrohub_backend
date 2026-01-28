@@ -6,7 +6,6 @@ from functools import lru_cache
 from typing import Dict, Optional
 
 import pandas as pd
-import whisper
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +31,7 @@ from modules.hub_cgsm.infrastructure_hub_cgsm.routes.hub_cgsm_routes import (
 load_dotenv()
 
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "tiny")
+ENABLE_TRANSCRIBE = os.getenv("ENABLE_TRANSCRIBE", "false").lower() == "true"
 
 app = FastAPI(
     title="AgroHub Magdalena API",
@@ -54,6 +54,15 @@ def get_whisper_model():
     Carga diferida del modelo Whisper para minimizar el tiempo de cold start en Vercel.
     Usa el modelo tiny por defecto (configurable con WHISPER_MODEL).
     """
+    if not ENABLE_TRANSCRIBE:
+        raise HTTPException(status_code=503, detail="Transcripción deshabilitada")
+    try:
+        import whisper  # pylint: disable=import-error
+    except ImportError as exc:  # pragma: no cover
+        raise HTTPException(
+            status_code=503, detail="Whisper no está instalado en este despliegue"
+        ) from exc
+
     return whisper.load_model(WHISPER_MODEL_NAME)
 
 
