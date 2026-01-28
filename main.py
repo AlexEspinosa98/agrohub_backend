@@ -83,6 +83,11 @@ async def read_root():
     return {"message": "AgroHub API operativa en Vercel"}
 
 
+@app.get("/hello")
+async def hello():
+    return {"message": "Hola mundo"}
+
+
 @app.post("/transcribe/")
 async def transcribe_audio(file: UploadFile = File(...)) -> Dict[str, str]:
     """
