@@ -1,7 +1,7 @@
 {
   "version": 2,
   "builds": [
-    { "src": "api/index.py", "use": "@vercel/python" }
+    { "src": "./api/index.py", "use": "@vercel/python" }
   ],
   "installCommand": "pip install -r requirements.txt",
   "functions": {
@@ -12,6 +12,6 @@
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
+    { "source": "/(.*)", "destination": "./api/index.py" }
   ]
 }
