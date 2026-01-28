@@ -3,7 +3,6 @@
   "builds": [
     { "src": "./api/index.py", "use": "@vercel/python" }
   ],
-  "installCommand": "pip install -r requirements.txt",
   "functions": {
     "api/index.py": {
       "runtime": "python3.11",
