@@ -190,19 +190,23 @@ class TestAuthenticatedUser:
         )  # updated_at should be after or equal to before_login
         assert isinstance(user.last_login, datetime)
 
-    def test_authenticated_user_email_validation_invalid_format(self) -> None:
-        """Test that invalid email format raises validation error."""
-        # Act & Assert - Invalid email formats should raise validation error
-        with pytest.raises(ValueError):
-            common_entities_builders.AuthenticatedUserBuilder().with_email(
-                "not-an-email"
-            ).build()
+    def test_authenticated_user_email_accepts_invalid_format(self) -> None:
+        """Email is stored even if format is not valid; no validation enforced."""
+        user = (
+            common_entities_builders.AuthenticatedUserBuilder()
+            .with_email("not-an-email")
+            .build()
+        )
+        assert user.email == "not-an-email"
 
-    def test_authenticated_user_email_validation_empty(self) -> None:
-        """Test that empty email raises validation error."""
-        # Act & Assert - Empty email should raise validation error
-        with pytest.raises(ValueError):
-            common_entities_builders.AuthenticatedUserBuilder().with_email("").build()
+    def test_authenticated_user_email_allows_empty(self) -> None:
+        """Empty email is allowed (no validation)."""
+        user = (
+            common_entities_builders.AuthenticatedUserBuilder()
+            .with_email("")
+            .build()
+        )
+        assert user.email == ""
 
     @pytest.mark.parametrize(
         "invalid_email",
@@ -214,15 +218,16 @@ class TestAuthenticatedUser:
             "double@@domain.com",
         ],
     )
-    def test_authenticated_user_email_validation_various_invalid_formats(
+    def test_authenticated_user_email_allows_various_invalid_formats(
         self, invalid_email: str
     ) -> None:
-        """Test various invalid email formats."""
-        # Act & Assert
-        with pytest.raises(ValueError):
-            common_entities_builders.AuthenticatedUserBuilder().with_email(
-                invalid_email
-            ).build()
+        """Invalid formats are accepted as plain strings."""
+        user = (
+            common_entities_builders.AuthenticatedUserBuilder()
+            .with_email(invalid_email)
+            .build()
+        )
+        assert user.email == invalid_email
 
     @pytest.mark.parametrize(
         "valid_email",
@@ -233,11 +238,10 @@ class TestAuthenticatedUser:
             "123@numbers.com",
         ],
     )
-    def test_authenticated_user_email_validation_various_valid_formats(
+    def test_authenticated_user_email_stores_various_valid_formats(
         self, valid_email: str
     ) -> None:
-        """Test various valid email formats."""
-        # Act - Should not raise exception
+        """Valid formats are stored unchanged (no normalization)."""
         user: common_entities.AuthenticatedUser = (
             common_entities_builders.AuthenticatedUserBuilder()
             .with_email(valid_email)
@@ -245,7 +249,7 @@ class TestAuthenticatedUser:
         )
 
         # Assert
-        assert user.email == valid_email.lower()  # EmailStr normalizes to lowercase
+        assert user.email == valid_email
 
     def test_authenticated_user_immutable_identity_across_updates(
         self, sample_authenticated_user: common_entities.AuthenticatedUser

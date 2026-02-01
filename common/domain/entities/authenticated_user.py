@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import EmailStr, Field
+from pydantic import Field
 
 from common.domain import (
     entities as common_entities,
@@ -9,7 +9,7 @@ from common.domain import (
 
 
 class AuthenticatedUser(common_entities.BaseEntity):
-    email: EmailStr = Field(description="User email address")
+    email: str = Field(description="User email address")
     user_status: common_enums.UserStatus = Field(description="Current user status")
     last_login: datetime | None = Field(None, description="Last login timestamp")
     is_premium: bool = Field(default=False, description="Is user a premium member")

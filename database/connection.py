@@ -1,46 +1,47 @@
+import logging
 import os
-import psycopg2
-from psycopg2.extras import RealDictCursor
 from contextlib import contextmanager
 from typing import Generator
-import logging
 
-# Configuración de logging
+import mysql.connector
+from mysql.connector.cursor import MySQLCursorDict
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Configuración de la base de datos
+# Configuración de la base de datos principal (MySQL)
 DATABASE_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'database': os.getenv('DB_NAME', 'agrohub'),
-    'user': os.getenv('DB_USER', 'postgres'),
-    'password': os.getenv('DB_PASSWORD', 'password')
+    "host": os.getenv("DB_HOST", "localhost"),
+    "port": int(os.getenv("DB_PORT", "3306")),
+    "database": os.getenv("DB_NAME", "agrohub"),
+    "user": os.getenv("DB_USER", "root"),
+    "password": os.getenv("DB_PASSWORD", "password"),
 }
 
+
 def get_connection():
-    """Obtiene una conexión a la base de datos PostgreSQL"""
+    """Obtiene una conexión a la base de datos MySQL"""
     try:
-        conn = psycopg2.connect(**DATABASE_CONFIG)
-        return conn
-    except psycopg2.Error as e:
-        logger.error(f"Error conectando a la base de datos: {e}")
+        return mysql.connector.connect(**DATABASE_CONFIG)
+    except mysql.connector.Error as e:  # pragma: no cover - conexión externa
+        logger.error("Error conectando a la base de datos: %s", e)
         raise
 
+
 @contextmanager
-def get_db_cursor() -> Generator[RealDictCursor, None, None]:
-    """Context manager para obtener un cursor de base de datos"""
+def get_db_cursor() -> Generator[MySQLCursorDict, None, None]:
+    """Context manager para obtener un cursor dict y manejar commit/rollback"""
     conn = None
-    cursor = None
+    cursor: MySQLCursorDict | None = None
     try:
         conn = get_connection()
-        cursor = conn.cursor(cursor_factory=RealDictCursor)
+        cursor = conn.cursor(dictionary=True)
         yield cursor
         conn.commit()
-    except Exception as e:
+    except Exception as e:  # pragma: no cover - manejo genérico
         if conn:
             conn.rollback()
-        logger.error(f"Error en operación de base de datos: {e}")
+        logger.error("Error en operación de base de datos: %s", e)
         raise
     finally:
         if cursor:
@@ -48,14 +49,15 @@ def get_db_cursor() -> Generator[RealDictCursor, None, None]:
         if conn:
             conn.close()
 
+
 def test_connection():
     """Prueba la conexión a la base de datos"""
     try:
         with get_db_cursor() as cursor:
-            cursor.execute("SELECT version();")
+            cursor.execute("SELECT VERSION() AS version")
             version = cursor.fetchone()
-            logger.info(f"Conexión exitosa a PostgreSQL: {version['version']}")
+            logger.info("Conexión exitosa a MySQL: %s", version.get("version"))
             return True
-    except Exception as e:
-        logger.error(f"Error al probar la conexión: {e}")
+    except Exception as e:  # pragma: no cover - conexión externa
+        logger.error("Error al probar la conexión: %s", e)
         return False

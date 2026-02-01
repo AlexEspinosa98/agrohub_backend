@@ -1,9 +1,14 @@
-from modules.hub_cgsm.domain_hub_cgsm.entities import EncuestaActores, EncuestaFaena, EncuestaPuntoAcopio, EncuestaMonitoreoAmbiental, Survey
+from modules.hub_cgsm.domain_hub_cgsm.entities import (
+    EncuestaActores,
+    EncuestaFaena,
+    EncuestaPuntoAcopio,
+    EncuestaMonitoreoAmbiental,
+    Survey,
+)
 from modules.hub_cgsm.domain_hub_cgsm.repositories import EncuestaRepository
 from database.connection import get_db_cursor
 from typing import List, Union, Optional
 from datetime import date
-from psycopg2.extras import execute_values
 
 class PostgresEncuestaRepository(EncuestaRepository):
     def __init__(self):
@@ -14,38 +19,38 @@ class PostgresEncuestaRepository(EncuestaRepository):
             # Table for EncuestaActores
             cur.execute("""
             CREATE TABLE IF NOT EXISTS encuestas_actores (
-                id SERIAL PRIMARY KEY,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 email TEXT,
                 fecha_creacion DATE,
                 id_actor TEXT UNIQUE,
                 nombre_completo TEXT,
-                rol_hub TEXT[],
+                rol_hub TEXT,
                 organizacion TEXT,
                 numero_identificacion TEXT,
                 contacto TEXT,
                 direccion_comunidad TEXT,
                 fotografia_actor TEXT,
                 id_activo TEXT,
-                tipo_activo TEXT[],
+                tipo_activo TEXT,
                 nombre_codigo_activo TEXT,
                 propietario_id TEXT,
                 numero_serie TEXT,
                 estado_activo TEXT,
-                permisos_licencias TEXT[],
+                permisos_licencias TEXT,
                 fotografia_activo TEXT,
                 rol_en_activo TEXT,
                 fecha_asignacion DATE,
                 observaciones TEXT,
-                autorizo_datos BOOLEAN,
-                activos_bioseguridad BOOLEAN,
+                autorizo_datos TINYINT(1),
+                activos_bioseguridad TINYINT(1),
                 fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            ) ENGINE=InnoDB;
             """)
 
             # Table for EncuestaFaena
             cur.execute("""
             CREATE TABLE IF NOT EXISTS encuestas_faenas (
-                id SERIAL PRIMARY KEY,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 email TEXT,
                 id_faena TEXT UNIQUE,
                 tipo_faena TEXT,
@@ -57,39 +62,38 @@ class PostgresEncuestaRepository(EncuestaRepository):
                 punto_final_gps TEXT,
                 nombre_sector TEXT,
 
-                superficie_intervenida DOUBLE PRECISION,
-                metodo_utilizado TEXT[],
+                superficie_intervenida DOUBLE,
+                metodo_utilizado TEXT,
                 numero_personas INT,
-                horas_trabajadas DOUBLE PRECISION,
+                horas_trabajadas DOUBLE,
                 fotografia_antes TEXT,
                 fotografia_despues TEXT,
-                checklist_bioseguridad TEXT[],
+                checklist_bioseguridad TEXT,
 
-                biomasa_humeda_kg DOUBLE PRECISION,
-                biomasa_seca_kg DOUBLE PRECISION,
-                destino_biomasa TEXT[],
+                biomasa_humeda_kg DOUBLE,
+                biomasa_seca_kg DOUBLE,
+                destino_biomasa TEXT,
                 numero_sacos INT,
                 punto_acopio_asociado TEXT,
-                oxigeno_disuelto_mgL DOUBLE PRECISION,
-                turbidez_NTU DOUBLE PRECISION,
-                salinidad_prom DOUBLE PRECISION,
-                cpue DOUBLE PRECISION,
+                oxigeno_disuelto_mgL DOUBLE,
+                turbidez_NTU DOUBLE,
+                salinidad_prom DOUBLE,
+                cpue DOUBLE,
                 incidencias_reportadas TEXT,
                 comentarios_comunitarios TEXT,
-                firma_digital_coordinador BOOLEAN,
+                firma_digital_coordinador TINYINT(1),
                 validacion_institucional TEXT,
 
                 fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            ) ENGINE=InnoDB;
             """)
 
             # Table for EncuestaPuntoAcopio
             cur.execute("""
             CREATE TABLE IF NOT EXISTS puntos_acopio_biomasa (
-                id SERIAL PRIMARY KEY,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 email TEXT,
 
-                -- Sección A. Identificación del Punto de Acopio
                 id_punto TEXT UNIQUE,
                 nombre_referencia TEXT,
                 tipo_punto TEXT,
@@ -97,35 +101,32 @@ class PostgresEncuestaRepository(EncuestaRepository):
                 sector_comunidad TEXT,
                 fotografia_georreferenciada TEXT,
 
-                -- Sección B. Datos de Biomasa Depositada
                 fecha_entrega TIMESTAMP,
-                cantidad_humedo_kg DOUBLE PRECISION,
-                cantidad_seco_kg DOUBLE PRECISION,
+                cantidad_humedo_kg DOUBLE,
+                cantidad_seco_kg DOUBLE,
                 numero_sacos_unidades INT,
                 estado_biomasa TEXT,
                 observaciones_biomasa TEXT,
 
-                -- Sección C. Destino y Gestión
-                destino_previsto TEXT[], -- Lista de valores
+                destino_previsto TEXT,
                 plazo_permanencia TEXT,
                 encargado_gestion TEXT,
                 registro_transporte TEXT,
                 evidencia_fotografica_documento TEXT,
 
-                -- Sección D. Control y Trazabilidad
-                checklist_bioseguridad TEXT[],
-                alertas_automaticas BOOLEAN,
-                firma_digital_responsable BOOLEAN,
+                checklist_bioseguridad TEXT,
+                alertas_automaticas TINYINT(1),
+                firma_digital_responsable TINYINT(1),
                 validacion_institucional TEXT,
 
                 fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            ) ENGINE=InnoDB;
             """)
 
             # Table for EncuestaMonitoreoAmbiental
             cur.execute("""
             CREATE TABLE IF NOT EXISTS monitoreos_ambientales (
-                id SERIAL PRIMARY KEY,
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 email TEXT,
                 id_monitoreo TEXT UNIQUE,
                 fecha TEXT,
@@ -147,7 +148,7 @@ class PostgresEncuestaRepository(EncuestaRepository):
                 firma_digital_responsable TEXT,
                 validacion_institucional TEXT,
                 fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
+            ) ENGINE=InnoDB;
             """)
 
     def save_bulk(self, surveys: List[Survey]) -> List[Survey]:

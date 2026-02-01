@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 
 class Association(BaseModel):
     id: Optional[int] = None
@@ -18,7 +18,7 @@ class User(BaseModel):
     name: str
     phone: str
     identification: str
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     password: str
     association_id: Optional[int] = None
     role: str = Field(default="user", description="Rol del usuario (user/admin)")
@@ -29,7 +29,7 @@ class UserPublic(BaseModel):
     name: str
     phone: str
     identification: str
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     association_id: Optional[int] = None
     role: str
     created_at: Optional[datetime] = None
