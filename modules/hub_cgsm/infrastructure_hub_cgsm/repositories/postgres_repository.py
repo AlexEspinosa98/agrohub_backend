@@ -22,7 +22,7 @@ class PostgresEncuestaRepository(EncuestaRepository):
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 email TEXT,
                 fecha_creacion DATE,
-                id_actor TEXT UNIQUE,
+                id_actor VARCHAR(191) UNIQUE,
                 nombre_completo TEXT,
                 rol_hub TEXT,
                 organizacion TEXT,
@@ -52,7 +52,7 @@ class PostgresEncuestaRepository(EncuestaRepository):
             CREATE TABLE IF NOT EXISTS encuestas_faenas (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 email TEXT,
-                id_faena TEXT UNIQUE,
+                id_faena VARCHAR(191) UNIQUE,
                 tipo_faena TEXT,
                 fecha_inicio DATE,
                 fecha_cierre DATE,
@@ -94,7 +94,7 @@ class PostgresEncuestaRepository(EncuestaRepository):
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 email TEXT,
 
-                id_punto TEXT UNIQUE,
+                id_punto VARCHAR(191) UNIQUE,
                 nombre_referencia TEXT,
                 tipo_punto TEXT,
                 ubicacion TEXT,
@@ -128,7 +128,7 @@ class PostgresEncuestaRepository(EncuestaRepository):
             CREATE TABLE IF NOT EXISTS monitoreos_ambientales (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 email TEXT,
-                id_monitoreo TEXT UNIQUE,
+                id_monitoreo VARCHAR(191) UNIQUE,
                 fecha TEXT,
                 hora TEXT,
                 cuadrilla_equipo_responsable TEXT,
