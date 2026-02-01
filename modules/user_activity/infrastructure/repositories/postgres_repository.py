@@ -1,13 +1,11 @@
 from datetime import date
 from typing import List, Optional
 import uuid
-
-from passlib.context import CryptContext
+import hashlib
 
 from database.mysql_connection import get_db_cursor
 from modules.user_activity.domain.entities import Association, Logbook, LogbookUpdate, User
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 DEFAULT_ROLE = "user"
 
 
@@ -66,7 +64,7 @@ class UserActivityRepository:
 
     # Users
     def create_user(self, user: User) -> int:
-        password_hash = pwd_context.hash(user.password)
+        password_hash = hashlib.sha256(user.password.encode("utf-8")).hexdigest()
         role_value = DEFAULT_ROLE
         with get_db_cursor() as cur:
             cur.execute(
@@ -100,7 +98,7 @@ class UserActivityRepository:
             return cur.fetchone()
 
     def verify_password(self, plain: str, hashed: str) -> bool:
-        return pwd_context.verify(plain, hashed)
+        return hashlib.sha256(plain.encode("utf-8")).hexdigest() == hashed
 
     def set_token(self, user_id: int) -> str:
         token = str(uuid.uuid4())
