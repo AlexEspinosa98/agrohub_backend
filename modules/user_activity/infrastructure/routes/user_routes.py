@@ -124,6 +124,8 @@ async def login(payload: UserLogin, repo: UserActivityRepository = Depends(get_r
         data={
             "token": token,
             "role": user.get("role", "user"),
+            "name": user.get("name"),
+            "email": user.get("email"),
         },
     )
 
