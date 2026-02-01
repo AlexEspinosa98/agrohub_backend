@@ -6,3 +6,5 @@ pandas
 openpyxl
 requests==2.32.4
 psycopg2-binary==2.9.10
+passlib[bcrypt]==1.7.4
+mysql-connector-python==9.1.0

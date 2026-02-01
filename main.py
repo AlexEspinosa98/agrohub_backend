@@ -27,6 +27,9 @@ from data_characterization.infrastructure.routes.data_characterization_routes im
 from modules.hub_cgsm.infrastructure_hub_cgsm.routes.hub_cgsm_routes import (
     router as hub_cgsm_router,
 )
+from modules.user_activity.infrastructure.routes.user_routes import (
+    router as user_activity_router,
+)
 
 load_dotenv()
 
@@ -35,7 +38,12 @@ ENABLE_TRANSCRIBE = os.getenv("ENABLE_TRANSCRIBE", "false").lower() == "true"
 
 app = FastAPI(
     title="AgroHub Magdalena API",
-    description="API para transcripción de audio y sincronización de datos de familias rurales",
+    description=(
+        "API para transcripción de audio y sincronización de datos de familias rurales. "
+        "Incluye módulos de caracterización, hub CGSM y actividad de usuarios. "
+        "Consulta la sección 'User Activity' para ver el flujo completo de registro, login "
+        "con rol por defecto `user` y gestión de bitácoras con autenticación por token."
+    ),
     version="1.0.0",
 )
 
@@ -76,6 +84,7 @@ async def log_requests(request: Request, call_next):
 
 app.include_router(data_characterization_router)
 app.include_router(hub_cgsm_router)
+app.include_router(user_activity_router)
 
 
 @app.get("/")
