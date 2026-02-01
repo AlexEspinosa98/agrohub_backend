@@ -1,7 +1,7 @@
 from datetime import date
-from typing import Optional
+from typing import Optional, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, status
 from pydantic import BaseModel
 
 from modules.user_activity.domain.entities import (
@@ -30,6 +30,12 @@ class LoginResponse(BaseModel):
     role: str
 
 
+class StandardResponse(BaseModel):
+    status: int
+    message: str
+    data: Optional[Any] = None
+
+
 def get_current_user(
     authorization: str = Header(None, alias="Authorization"),
     repo: UserActivityRepository = Depends(get_repo),
@@ -45,16 +51,19 @@ def get_current_user(
 
 @router.post(
     "/associations",
-    response_model=int,
+    status_code=status.HTTP_201_CREATED,
+    response_model=StandardResponse,
     summary="Crear asociación",
     description="Registra una nueva asociación. Devuelve el `id` generado.",
 )
 async def create_association(association: Association, repo: UserActivityRepository = Depends(get_repo)):
-    return repo.create_association(association)
+    assoc_id = repo.create_association(association)
+    return StandardResponse(status=status.HTTP_201_CREATED, message="asociación creada", data={"id": assoc_id})
 
 
 @router.get(
     "/associations/{association_id}",
+    response_model=StandardResponse,
     summary="Consultar asociación",
     description="Obtiene datos de la asociación por su `id`.",
 )
@@ -62,12 +71,13 @@ async def get_association(association_id: int, repo: UserActivityRepository = De
     assoc = repo.get_association(association_id)
     if not assoc:
         raise HTTPException(status_code=404, detail="Asociación no encontrada")
-    return assoc
+    return StandardResponse(status=status.HTTP_200_OK, message="asociación encontrada", data=assoc)
 
 
 @router.post(
     "/users/register",
-    response_model=int,
+    status_code=status.HTTP_201_CREATED,
+    response_model=StandardResponse,
     summary="Registrar usuario",
     description="Crea un usuario con rol por defecto **user**. Devuelve el `id` generado.",
 )
@@ -75,7 +85,12 @@ async def register_user(user: User, repo: UserActivityRepository = Depends(get_r
     try:
         # Forzamos rol por defecto en registro
         user.role = "user"
-        return repo.create_user(user)
+        user_id = repo.create_user(user)
+        return StandardResponse(
+            status=status.HTTP_201_CREATED,
+            message="usuario creado",
+            data={"id": user_id},
+        )
     except Exception as exc:  # noqa: BLE001
         # Posible violación de unique
         raise HTTPException(status_code=400, detail="Teléfono o identificación ya registrados") from exc
@@ -83,7 +98,7 @@ async def register_user(user: User, repo: UserActivityRepository = Depends(get_r
 
 @router.get(
     "/users/{user_id}",
-    response_model=UserPublic,
+    response_model=StandardResponse,
     summary="Obtener usuario",
     description="Devuelve datos públicos del usuario por `id`.",
 )
@@ -91,12 +106,12 @@ async def get_user(user_id: int, repo: UserActivityRepository = Depends(get_repo
     user = repo.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    return user
+    return StandardResponse(status=status.HTTP_200_OK, message="usuario encontrado", data=user)
 
 
 @router.post(
     "/users/login",
-    response_model=LoginResponse,
+    response_model=StandardResponse,
     summary="Login de usuario",
     description="Autentica por teléfono o identificación. Retorna token y rol asignado.",
 )
@@ -107,17 +122,21 @@ async def login(payload: UserLogin, repo: UserActivityRepository = Depends(get_r
     if not repo.verify_password(payload.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Credenciales inválidas")
     token = repo.set_token(user["id"])
-    return LoginResponse(
+    return StandardResponse(
+        status=status.HTTP_200_OK,
         message="login ok",
-        user_id=user["id"],
-        token=token,
-        role=user.get("role", "user"),
+        data={
+            "user_id": user["id"],
+            "token": token,
+            "role": user.get("role", "user"),
+        },
     )
 
 
 @router.post(
     "/logbooks",
-    response_model=int,
+    status_code=status.HTTP_201_CREATED,
+    response_model=StandardResponse,
     summary="Crear bitácora",
     description="Crea una bitácora para un usuario autenticado. Devuelve el `id` generado.",
 )
@@ -131,11 +150,13 @@ async def create_logbook(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     if logbook.association_id and not repo.get_association(logbook.association_id):
         raise HTTPException(status_code=404, detail="Asociación no encontrada")
-    return repo.create_logbook(logbook)
+    logbook_id = repo.create_logbook(logbook)
+    return StandardResponse(status=status.HTTP_201_CREATED, message="bitácora creada", data={"id": logbook_id})
 
 
 @router.put(
     "/logbooks/{logbook_id}",
+    response_model=StandardResponse,
     summary="Actualizar bitácora",
     description="Actualiza campos editables de una bitácora existente.",
 )
@@ -150,11 +171,12 @@ async def update_logbook(
     updated = repo.update_logbook(logbook_id, payload)
     if not updated:
         raise HTTPException(status_code=400, detail="Nada para actualizar")
-    return {"message": "actualizado"}
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácora actualizada", data={"id": logbook_id})
 
 
 @router.delete(
     "/logbooks/{logbook_id}",
+    response_model=StandardResponse,
     summary="Eliminar bitácora",
     description="Elimina una bitácora del usuario autenticado.",
 )
@@ -166,11 +188,12 @@ async def delete_logbook(
     deleted = repo.delete_logbook(logbook_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Bitácora no encontrada")
-    return {"message": "eliminado"}
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácora eliminada", data={"id": logbook_id})
 
 
 @router.get(
     "/logbooks/{logbook_id}",
+    response_model=StandardResponse,
     summary="Consultar bitácora",
     description="Obtiene detalles de una bitácora por `id` (requiere token).",
 )
@@ -182,11 +205,12 @@ async def get_logbook(
     logbook = repo.get_logbook(logbook_id)
     if not logbook:
         raise HTTPException(status_code=404, detail="Bitácora no encontrada")
-    return logbook
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácora encontrada", data=logbook)
 
 
 @router.get(
     "/logbooks/by-user/{user_id}",
+    response_model=StandardResponse,
     summary="Listar bitácoras por usuario",
     description="Lista bitácoras filtrando opcionalmente por rango de fechas.",
 )
@@ -197,11 +221,13 @@ async def list_logbooks_by_user(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    return repo.list_logbooks_by_user(user_id, start_date, end_date)
+    items = repo.list_logbooks_by_user(user_id, start_date, end_date)
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario", data=items)
 
 
 @router.get(
     "/logbooks/by-association/{association_id}",
+    response_model=StandardResponse,
     summary="Listar bitácoras por asociación",
     description="Lista bitácoras de una asociación, con filtros de fechas opcionales.",
 )
@@ -212,4 +238,5 @@ async def list_logbooks_by_association(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    return repo.list_logbooks_by_association(association_id, start_date, end_date)
+    items = repo.list_logbooks_by_association(association_id, start_date, end_date)
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras de la asociación", data=items)
