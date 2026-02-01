@@ -57,8 +57,8 @@ def get_current_user(
     description="Registra una nueva asociación. Devuelve el `id` generado.",
 )
 async def create_association(association: Association, repo: UserActivityRepository = Depends(get_repo)):
-    assoc_id = repo.create_association(association)
-    return StandardResponse(status=status.HTTP_201_CREATED, message="asociación creada", data={"id": assoc_id})
+    repo.create_association(association)
+    return StandardResponse(status=status.HTTP_201_CREATED, message="asociación creada")
 
 
 @router.get(
@@ -85,12 +85,8 @@ async def register_user(user: User, repo: UserActivityRepository = Depends(get_r
     try:
         # Forzamos rol por defecto en registro
         user.role = "user"
-        user_id = repo.create_user(user)
-        return StandardResponse(
-            status=status.HTTP_201_CREATED,
-            message="usuario creado",
-            data={"id": user_id},
-        )
+        repo.create_user(user)
+        return StandardResponse(status=status.HTTP_201_CREATED, message="usuario creado")
     except Exception as exc:  # noqa: BLE001
         # Posible violación de unique
         raise HTTPException(status_code=400, detail="Teléfono o identificación ya registrados") from exc
@@ -126,7 +122,6 @@ async def login(payload: UserLogin, repo: UserActivityRepository = Depends(get_r
         status=status.HTTP_200_OK,
         message="login ok",
         data={
-            "user_id": user["id"],
             "token": token,
             "role": user.get("role", "user"),
         },
@@ -150,8 +145,8 @@ async def create_logbook(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     if logbook.association_id and not repo.get_association(logbook.association_id):
         raise HTTPException(status_code=404, detail="Asociación no encontrada")
-    logbook_id = repo.create_logbook(logbook)
-    return StandardResponse(status=status.HTTP_201_CREATED, message="bitácora creada", data={"id": logbook_id})
+    repo.create_logbook(logbook)
+    return StandardResponse(status=status.HTTP_201_CREATED, message="bitácora creada")
 
 
 @router.put(
@@ -171,7 +166,7 @@ async def update_logbook(
     updated = repo.update_logbook(logbook_id, payload)
     if not updated:
         raise HTTPException(status_code=400, detail="Nada para actualizar")
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácora actualizada", data={"id": logbook_id})
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácora actualizada")
 
 
 @router.delete(
@@ -188,7 +183,7 @@ async def delete_logbook(
     deleted = repo.delete_logbook(logbook_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Bitácora no encontrada")
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácora eliminada", data={"id": logbook_id})
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácora eliminada")
 
 
 @router.get(
