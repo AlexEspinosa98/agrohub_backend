@@ -245,6 +245,22 @@ async def list_logbooks_by_user(
 
 
 @router.get(
+    "/logbooks/me",
+    response_model=StandardResponse,
+    summary="Listar mis bitácoras",
+    description="Devuelve todas las bitácoras del usuario autenticado.",
+)
+async def list_my_logbooks(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    items = repo.list_logbooks_by_user(current_user["id"], start_date, end_date)
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario autenticado", data=items)
+
+
+@router.get(
     "/logbooks/by-association/{association_id}",
     response_model=StandardResponse,
     summary="Listar bitácoras por asociación",
