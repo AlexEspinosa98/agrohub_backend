@@ -43,6 +43,16 @@ class StandardResponse(BaseModel):
     data: Optional[Any] = None
 
 
+def _sanitize_logbook(entry: dict) -> dict:
+    """Remove user_id from logbook payloads before returning to clients."""
+    if not entry:
+        return entry
+    entry = dict(entry)
+    entry.pop("user_id", None)
+    entry.pop("association_id", None)
+    return entry
+
+
 def get_current_user(
     authorization: str = Security(auth_scheme),
     repo: UserActivityRepository = Depends(get_repo),
@@ -222,7 +232,8 @@ async def list_logbooks_by_user(
     if user_id != current_user["id"]:
         raise HTTPException(status_code=403, detail="No autorizado para este usuario")
     items = repo.list_logbooks_by_user(user_id, start_date, end_date)
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario", data=items)
+    sanitized = [_sanitize_logbook(item) for item in items]
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario", data=sanitized)
 
 
 @router.get(
@@ -238,7 +249,8 @@ async def list_my_logbooks(
     current_user=Depends(get_current_user),
 ):
     items = repo.list_logbooks_by_user(current_user["id"], start_date, end_date)
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario autenticado", data=items)
+    sanitized = [_sanitize_logbook(item) for item in items]
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario autenticado", data=sanitized)
 
 
 @router.get(
@@ -257,7 +269,7 @@ async def get_logbook(
         raise HTTPException(status_code=404, detail="Bitácora no encontrada")
     if logbook["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="No autorizado para esta bitácora")
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácora encontrada", data=logbook)
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácora encontrada", data=_sanitize_logbook(logbook))
 
 
 @router.get(
@@ -274,4 +286,5 @@ async def list_logbooks_by_association(
     current_user=Depends(get_current_user),
 ):
     items = repo.list_logbooks_by_association(association_id, start_date, end_date)
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras de la asociación", data=items)
+    sanitized = [_sanitize_logbook(item) for item in items]
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras de la asociación", data=sanitized)

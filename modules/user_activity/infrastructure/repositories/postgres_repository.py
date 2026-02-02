@@ -192,7 +192,15 @@ class UserActivityRepository:
 
     def get_logbook(self, logbook_id: int) -> Optional[dict]:
         with get_db_cursor() as cur:
-            cur.execute("SELECT * FROM logbooks WHERE id = %s", (logbook_id,))
+            cur.execute(
+                """
+                SELECT l.*, a.name AS association_name
+                FROM logbooks l
+                LEFT JOIN associations a ON l.association_id = a.id
+                WHERE l.id = %s
+                """,
+                (logbook_id,),
+            )
             return cur.fetchone()
 
     def list_logbooks_by_user(
@@ -206,7 +214,12 @@ class UserActivityRepository:
         if end_date:
             query += " AND activity_date <= %s"
             params.append(end_date)
-        query += " ORDER BY activity_date DESC"
+        query = (
+            "SELECT l.*, a.name AS association_name "
+            "FROM (" + query + ") l "
+            "LEFT JOIN associations a ON l.association_id = a.id "
+            "ORDER BY l.activity_date DESC"
+        )
         with get_db_cursor() as cur:
             cur.execute(query, params)
             return cur.fetchall()
@@ -222,7 +235,12 @@ class UserActivityRepository:
         if end_date:
             query += " AND activity_date <= %s"
             params.append(end_date)
-        query += " ORDER BY activity_date DESC"
+        query = (
+            "SELECT l.*, a.name AS association_name "
+            "FROM (" + query + ") l "
+            "LEFT JOIN associations a ON l.association_id = a.id "
+            "ORDER BY l.activity_date DESC"
+        )
         with get_db_cursor() as cur:
             cur.execute(query, params)
             return cur.fetchall()
