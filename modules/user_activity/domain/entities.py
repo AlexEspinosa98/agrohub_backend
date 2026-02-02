@@ -47,6 +47,11 @@ class Logbook(BaseModel):
     activity_date: date
     created_at: Optional[datetime] = None
 
+class LogbookCreate(BaseModel):
+    title: str
+    description: str
+    activity_date: date
+
 class LogbookUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None

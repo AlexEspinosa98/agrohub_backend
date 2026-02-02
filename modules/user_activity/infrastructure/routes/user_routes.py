@@ -1,12 +1,14 @@
 from datetime import date
 from typing import Optional, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, Header, Security, status
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
 from modules.user_activity.domain.entities import (
     Association,
     Logbook,
+    LogbookCreate,
     LogbookUpdate,
     User,
     UserLogin,
@@ -18,6 +20,11 @@ from modules.user_activity.infrastructure.repositories.postgres_repository impor
 
 router = APIRouter(prefix="/user-activity", tags=["User Activity"])
 
+auth_scheme = APIKeyHeader(
+    name="Authorization",
+    description="Usa el formato: `Token <tu_token>`",
+    auto_error=False,
+)
 
 def get_repo():
     return UserActivityRepository()
@@ -37,7 +44,7 @@ class StandardResponse(BaseModel):
 
 
 def get_current_user(
-    authorization: str = Header(None, alias="Authorization"),
+    authorization: str = Security(auth_scheme),
     repo: UserActivityRepository = Depends(get_repo),
 ):
     if not authorization or not authorization.lower().startswith("token "):
@@ -138,16 +145,19 @@ async def login(payload: UserLogin, repo: UserActivityRepository = Depends(get_r
     description="Crea una bitácora para un usuario autenticado. Devuelve el `id` generado.",
 )
 async def create_logbook(
-    logbook: Logbook,
+    logbook: LogbookCreate,
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    # Asegura usuario válido
-    if not repo.get_user_by_id(logbook.user_id):
-        raise HTTPException(status_code=404, detail="Usuario no encontrado")
-    if logbook.association_id and not repo.get_association(logbook.association_id):
-        raise HTTPException(status_code=404, detail="Asociación no encontrada")
-    repo.create_logbook(logbook)
+    # El user_id se obtiene del token
+    logbook_entity = Logbook(
+        user_id=current_user["id"],
+        association_id=None,
+        title=logbook.title,
+        description=logbook.description,
+        activity_date=logbook.activity_date,
+    )
+    repo.create_logbook(logbook_entity)
     return StandardResponse(status=status.HTTP_201_CREATED, message="bitácora creada")
 
 
@@ -163,8 +173,11 @@ async def update_logbook(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    if not repo.get_logbook(logbook_id):
+    existing = repo.get_logbook(logbook_id)
+    if not existing:
         raise HTTPException(status_code=404, detail="Bitácora no encontrada")
+    if existing["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado para esta bitácora")
     updated = repo.update_logbook(logbook_id, payload)
     if not updated:
         raise HTTPException(status_code=400, detail="Nada para actualizar")
@@ -182,6 +195,11 @@ async def delete_logbook(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
+    existing = repo.get_logbook(logbook_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Bitácora no encontrada")
+    if existing["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado para esta bitácora")
     deleted = repo.delete_logbook(logbook_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Bitácora no encontrada")
@@ -202,6 +220,8 @@ async def get_logbook(
     logbook = repo.get_logbook(logbook_id)
     if not logbook:
         raise HTTPException(status_code=404, detail="Bitácora no encontrada")
+    if logbook["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado para esta bitácora")
     return StandardResponse(status=status.HTTP_200_OK, message="bitácora encontrada", data=logbook)
 
 
@@ -218,6 +238,8 @@ async def list_logbooks_by_user(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
+    if user_id != current_user["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado para este usuario")
     items = repo.list_logbooks_by_user(user_id, start_date, end_date)
     return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario", data=items)
 
