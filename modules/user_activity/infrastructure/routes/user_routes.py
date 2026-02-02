@@ -207,25 +207,6 @@ async def delete_logbook(
 
 
 @router.get(
-    "/logbooks/{logbook_id}",
-    response_model=StandardResponse,
-    summary="Consultar bitácora",
-    description="Obtiene detalles de una bitácora por `id` (requiere token).",
-)
-async def get_logbook(
-    logbook_id: int,
-    repo: UserActivityRepository = Depends(get_repo),
-    current_user=Depends(get_current_user),
-):
-    logbook = repo.get_logbook(logbook_id)
-    if not logbook:
-        raise HTTPException(status_code=404, detail="Bitácora no encontrada")
-    if logbook["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="No autorizado para esta bitácora")
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácora encontrada", data=logbook)
-
-
-@router.get(
     "/logbooks/by-user/{user_id}",
     response_model=StandardResponse,
     summary="Listar bitácoras por usuario",
@@ -258,6 +239,25 @@ async def list_my_logbooks(
 ):
     items = repo.list_logbooks_by_user(current_user["id"], start_date, end_date)
     return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario autenticado", data=items)
+
+
+@router.get(
+    "/logbooks/{logbook_id}",
+    response_model=StandardResponse,
+    summary="Consultar bitácora",
+    description="Obtiene detalles de una bitácora por `id` (requiere token).",
+)
+async def get_logbook(
+    logbook_id: int,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    logbook = repo.get_logbook(logbook_id)
+    if not logbook:
+        raise HTTPException(status_code=404, detail="Bitácora no encontrada")
+    if logbook["user_id"] != current_user["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado para esta bitácora")
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácora encontrada", data=logbook)
 
 
 @router.get(
