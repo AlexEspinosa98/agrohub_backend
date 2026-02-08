@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional, Any
+from typing import Optional, Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Security, status
 from fastapi.security import APIKeyHeader
@@ -7,12 +7,14 @@ from pydantic import BaseModel
 
 from modules.user_activity.domain.entities import (
     Association,
+    AssociationListItem,
     Logbook,
     LogbookCreate,
     LogbookUpdate,
     User,
     UserLogin,
     UserPublic,
+    UserRegister,
 )
 from modules.user_activity.infrastructure.repositories.postgres_repository import (
     UserActivityRepository,
@@ -41,6 +43,12 @@ class StandardResponse(BaseModel):
     status: int
     message: str
     data: Optional[Any] = None
+
+
+class AssociationsResponse(BaseModel):
+    status: int
+    message: str
+    data: List[AssociationListItem]
 
 
 def _sanitize_logbook(entry: dict) -> dict:
@@ -79,6 +87,17 @@ async def create_association(association: Association, repo: UserActivityReposit
 
 
 @router.get(
+    "/associations",
+    response_model=AssociationsResponse,
+    summary="Listar asociaciones",
+    description="Devuelve id, nombre y municipio (ciudad) de todas las asociaciones.",
+)
+async def list_associations(repo: UserActivityRepository = Depends(get_repo)):
+    items = repo.list_associations()
+    return AssociationsResponse(status=status.HTTP_200_OK, message="asociaciones", data=items)
+
+
+@router.get(
     "/associations/{association_id}",
     response_model=StandardResponse,
     summary="Consultar asociación",
@@ -96,14 +115,18 @@ async def get_association(association_id: int, repo: UserActivityRepository = De
     status_code=status.HTTP_201_CREATED,
     response_model=StandardResponse,
     summary="Registrar usuario",
-    description="Crea un usuario con rol por defecto **user**. Devuelve el `id` generado.",
+    description="Crea un usuario con rol por defecto **user**. Requiere `association_id` para vincularlo a una asociación. Devuelve el `id` generado.",
 )
-async def register_user(user: User, repo: UserActivityRepository = Depends(get_repo)):
+async def register_user(user: UserRegister, repo: UserActivityRepository = Depends(get_repo)):
     try:
+        # Validar asociación existente
+        if not repo.get_association(user.association_id):
+            raise HTTPException(status_code=404, detail="Asociación no encontrada")
         # Forzamos rol por defecto en registro
-        user.role = "user"
-        repo.create_user(user)
-        return StandardResponse(status=status.HTTP_201_CREATED, message="usuario creado")
+        user_data = user.dict()
+        user_data["role"] = "user"
+        new_id = repo.create_user(User(**user_data))
+        return StandardResponse(status=status.HTTP_201_CREATED, message="usuario creado", data={"id": new_id})
     except Exception as exc:  # noqa: BLE001
         # Posible violación de unique
         raise HTTPException(status_code=400, detail="Teléfono o identificación ya registrados") from exc
@@ -217,40 +240,36 @@ async def delete_logbook(
 
 
 @router.get(
-    "/logbooks/by-user/{user_id}",
-    response_model=StandardResponse,
-    summary="Listar bitácoras por usuario",
-    description="Lista bitácoras filtrando opcionalmente por rango de fechas.",
-)
-async def list_logbooks_by_user(
-    user_id: int,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    repo: UserActivityRepository = Depends(get_repo),
-    current_user=Depends(get_current_user),
-):
-    if user_id != current_user["id"]:
-        raise HTTPException(status_code=403, detail="No autorizado para este usuario")
-    items = repo.list_logbooks_by_user(user_id, start_date, end_date)
-    sanitized = [_sanitize_logbook(item) for item in items]
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario", data=sanitized)
-
-
-@router.get(
     "/logbooks/me",
     response_model=StandardResponse,
-    summary="Listar mis bitácoras",
-    description="Devuelve todas las bitácoras del usuario autenticado.",
+    summary="Listar bitácoras",
+    description="Lista bitácoras del usuario autenticado. Permite filtrar por fechas, usuario (opcional, pero debe coincidir con el token) y asociación. Incluye paginación.",
 )
 async def list_my_logbooks(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
+    user_id: Optional[int] = None,
+    association_id: Optional[int] = None,
+    page: int = 1,
+    page_size: int = 50,
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    items = repo.list_logbooks_by_user(current_user["id"], start_date, end_date)
+    # Seguridad: si se pasa user_id, debe ser el mismo del token
+    effective_user_id = user_id if user_id is not None else current_user["id"]
+    if effective_user_id != current_user["id"]:
+        raise HTTPException(status_code=403, detail="No autorizado para este usuario")
+
+    items = repo.list_logbooks(
+        user_id=effective_user_id,
+        association_id=association_id,
+        start_date=start_date,
+        end_date=end_date,
+        page=page,
+        page_size=page_size,
+    )
     sanitized = [_sanitize_logbook(item) for item in items]
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario autenticado", data=sanitized)
+    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras del usuario", data=sanitized)
 
 
 @router.get(
@@ -270,21 +289,3 @@ async def get_logbook(
     if logbook["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="No autorizado para esta bitácora")
     return StandardResponse(status=status.HTTP_200_OK, message="bitácora encontrada", data=_sanitize_logbook(logbook))
-
-
-@router.get(
-    "/logbooks/by-association/{association_id}",
-    response_model=StandardResponse,
-    summary="Listar bitácoras por asociación",
-    description="Lista bitácoras de una asociación, con filtros de fechas opcionales.",
-)
-async def list_logbooks_by_association(
-    association_id: int,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    repo: UserActivityRepository = Depends(get_repo),
-    current_user=Depends(get_current_user),
-):
-    items = repo.list_logbooks_by_association(association_id, start_date, end_date)
-    sanitized = [_sanitize_logbook(item) for item in items]
-    return StandardResponse(status=status.HTTP_200_OK, message="bitácoras de la asociación", data=sanitized)

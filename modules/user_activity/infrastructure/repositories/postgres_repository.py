@@ -140,6 +140,14 @@ class UserActivityRepository:
             cur.execute("SELECT * FROM associations WHERE id = %s", (association_id,))
             return cur.fetchone()
 
+    def list_associations(self) -> List[dict]:
+        """List association id, name and municipality (city)."""
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT id, name, municipality FROM associations ORDER BY name ASC;"
+            )
+            return cur.fetchall()
+
     # Logbooks
     def create_logbook(self, logbook: Logbook) -> int:
         with get_db_cursor() as cur:
@@ -206,41 +214,39 @@ class UserActivityRepository:
     def list_logbooks_by_user(
         self, user_id: int, start_date: Optional[date], end_date: Optional[date]
     ) -> List[dict]:
-        query = "SELECT * FROM logbooks WHERE user_id = %s"
-        params = [user_id]
-        if start_date:
-            query += " AND activity_date >= %s"
-            params.append(start_date)
-        if end_date:
-            query += " AND activity_date <= %s"
-            params.append(end_date)
-        query = (
-            "SELECT l.*, a.name AS association_name "
-            "FROM (" + query + ") l "
-            "LEFT JOIN associations a ON l.association_id = a.id "
-            "ORDER BY l.activity_date DESC"
-        )
-        with get_db_cursor() as cur:
-            cur.execute(query, params)
-            return cur.fetchall()
+        return self.list_logbooks(user_id=user_id, association_id=None, start_date=start_date, end_date=end_date)
 
-    def list_logbooks_by_association(
-        self, association_id: int, start_date: Optional[date], end_date: Optional[date]
+    def list_logbooks(
+        self,
+        user_id: Optional[int],
+        association_id: Optional[int],
+        start_date: Optional[date],
+        end_date: Optional[date],
+        page: int = 1,
+        page_size: int = 50,
     ) -> List[dict]:
-        query = "SELECT * FROM logbooks WHERE association_id = %s"
-        params = [association_id]
+        query = "SELECT * FROM logbooks WHERE 1=1"
+        params: List = []
+        if user_id is not None:
+            query += " AND user_id = %s"
+            params.append(user_id)
+        if association_id is not None:
+            query += " AND association_id = %s"
+            params.append(association_id)
         if start_date:
             query += " AND activity_date >= %s"
             params.append(start_date)
         if end_date:
             query += " AND activity_date <= %s"
             params.append(end_date)
+
+        offset = (page - 1) * page_size
         query = (
             "SELECT l.*, a.name AS association_name "
-            "FROM (" + query + ") l "
+            "FROM (" + query + " ORDER BY activity_date DESC LIMIT %s OFFSET %s) l "
             "LEFT JOIN associations a ON l.association_id = a.id "
-            "ORDER BY l.activity_date DESC"
         )
+        params.extend([page_size, offset])
         with get_db_cursor() as cur:
             cur.execute(query, params)
             return cur.fetchall()

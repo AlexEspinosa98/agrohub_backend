@@ -2,6 +2,13 @@ from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel, Field
 
+
+class AssociationListItem(BaseModel):
+    id: int
+    name: str
+    municipality: Optional[str] = Field(None, description="Municipio (ciudad) de la asociación")
+
+
 class Association(BaseModel):
     id: Optional[int] = None
     name: str
@@ -23,6 +30,26 @@ class User(BaseModel):
     association_id: Optional[int] = None
     role: str = Field(default="user", description="Rol del usuario (user/admin)")
     created_at: Optional[datetime] = None
+
+
+class UserRegister(BaseModel):
+    name: str
+    phone: str
+    identification: str
+    email: Optional[str] = None
+    password: str
+    association_id: int = Field(..., description="ID de la asociación a la que se vincula el usuario")
+    class Config:
+        schema_extra = {
+            "example": {
+                "name": "Laura Méndez",
+                "phone": "3001234567",
+                "identification": "1020304050",
+                "email": "laura@example.com",
+                "password": "contraseña_segura",
+                "association_id": 1,
+            }
+        }
 
 class UserPublic(BaseModel):
     id: int
