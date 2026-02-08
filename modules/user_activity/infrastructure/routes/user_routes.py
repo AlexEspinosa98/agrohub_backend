@@ -125,8 +125,8 @@ async def register_user(user: UserRegister, repo: UserActivityRepository = Depen
         # Forzamos rol por defecto en registro
         user_data = user.dict()
         user_data["role"] = "user"
-        new_id = repo.create_user(User(**user_data))
-        return StandardResponse(status=status.HTTP_201_CREATED, message="usuario creado", data={"id": new_id})
+        repo.create_user(User(**user_data))
+        return StandardResponse(status=status.HTTP_201_CREATED, message="usuario creado", data=None)
     except Exception as exc:  # noqa: BLE001
         # Posible violación de unique
         raise HTTPException(status_code=400, detail="Teléfono o identificación ya registrados") from exc
