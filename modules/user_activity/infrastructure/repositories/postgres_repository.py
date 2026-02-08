@@ -4,7 +4,14 @@ import uuid
 import hashlib
 
 from database.mysql_connection import get_db_cursor
-from modules.user_activity.domain.entities import Association, Logbook, LogbookUpdate, User
+from modules.user_activity.domain.entities import (
+    Association,
+    AssociationUpdate,
+    Logbook,
+    LogbookUpdate,
+    User,
+    UserUpdate,
+)
 
 DEFAULT_ROLE = "user"
 
@@ -65,7 +72,7 @@ class UserActivityRepository:
     # Users
     def create_user(self, user: User) -> int:
         password_hash = hashlib.sha256(user.password.encode("utf-8")).hexdigest()
-        role_value = DEFAULT_ROLE
+        role_value = user.role if getattr(user, "role", None) else DEFAULT_ROLE
         with get_db_cursor() as cur:
             cur.execute(
                 """
@@ -116,6 +123,27 @@ class UserActivityRepository:
             cur.execute("SELECT * FROM users WHERE auth_token = %s", (token,))
             return cur.fetchone()
 
+    def update_user(self, user_id: int, data: UserUpdate) -> bool:
+        fields = []
+        values = []
+        for attr in ["name", "phone", "identification", "email", "association_id", "role"]:
+            value = getattr(data, attr, None)
+            if value is not None:
+                fields.append(f"{attr} = %s")
+                values.append(value)
+        if getattr(data, "password", None):
+            fields.append("password_hash = %s")
+            values.append(hashlib.sha256(data.password.encode("utf-8")).hexdigest())
+        if not fields:
+            return False
+        values.append(user_id)
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"UPDATE users SET {', '.join(fields)} WHERE id = %s",
+                values,
+            )
+            return cur.rowcount > 0
+
     # Associations
     def create_association(self, association: Association) -> int:
         with get_db_cursor() as cur:
@@ -139,6 +167,24 @@ class UserActivityRepository:
         with get_db_cursor() as cur:
             cur.execute("SELECT * FROM associations WHERE id = %s", (association_id,))
             return cur.fetchone()
+
+    def update_association(self, association_id: int, data: AssociationUpdate) -> bool:
+        fields = []
+        values = []
+        for attr in ["name", "latitude", "longitude", "department", "municipality", "vereda"]:
+            value = getattr(data, attr, None)
+            if value is not None:
+                fields.append(f"{attr} = %s")
+                values.append(value)
+        if not fields:
+            return False
+        values.append(association_id)
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"UPDATE associations SET {', '.join(fields)} WHERE id = %s",
+                values,
+            )
+            return cur.rowcount > 0
 
     def list_associations(self) -> List[dict]:
         """List association id, name and municipality (city)."""

@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from modules.user_activity.domain.entities import (
     Association,
     AssociationListItem,
+    AssociationCreate,
+    AssociationUpdate,
     Logbook,
     LogbookCreate,
     LogbookUpdate,
@@ -15,6 +17,8 @@ from modules.user_activity.domain.entities import (
     UserLogin,
     UserPublic,
     UserRegister,
+    UserUpdate,
+    AdminUserCreate,
 )
 from modules.user_activity.infrastructure.repositories.postgres_repository import (
     UserActivityRepository,
@@ -74,14 +78,24 @@ def get_current_user(
     return user
 
 
+def _ensure_admin(user: dict):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Requiere rol admin")
+
+
 @router.post(
     "/associations",
     status_code=status.HTTP_201_CREATED,
     response_model=StandardResponse,
     summary="Crear asociación",
-    description="Registra una nueva asociación. Devuelve el `id` generado.",
+    description="Registra una nueva asociación (solo admin).",
 )
-async def create_association(association: Association, repo: UserActivityRepository = Depends(get_repo)):
+async def create_association(
+    association: AssociationCreate,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    _ensure_admin(current_user)
     repo.create_association(association)
     return StandardResponse(status=status.HTTP_201_CREATED, message="asociación creada")
 
@@ -110,25 +124,43 @@ async def get_association(association_id: int, repo: UserActivityRepository = De
     return StandardResponse(status=status.HTTP_200_OK, message="asociación encontrada", data=assoc)
 
 
+@router.put(
+    "/associations/{association_id}",
+    response_model=StandardResponse,
+    summary="Editar asociación",
+    description="Actualiza datos de la asociación (solo admin).",
+)
+async def update_association(
+    association_id: int,
+    payload: AssociationUpdate,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    _ensure_admin(current_user)
+    if not repo.get_association(association_id):
+        raise HTTPException(status_code=404, detail="Asociación no encontrada")
+    updated = repo.update_association(association_id, payload)
+    if not updated:
+        raise HTTPException(status_code=400, detail="Nada para actualizar")
+    return StandardResponse(status=status.HTTP_200_OK, message="asociación actualizada")
+
+
 @router.post(
     "/users/register",
     status_code=status.HTTP_201_CREATED,
     response_model=StandardResponse,
-    summary="Registrar usuario",
-    description="Crea un usuario con rol por defecto **user**. Requiere `association_id` para vincularlo a una asociación. Devuelve el `id` generado.",
+    summary="Registrar usuario (público)",
+    description="Crea un usuario con rol por defecto **user**. Requiere `association_id` para vincularlo a una asociación.",
 )
 async def register_user(user: UserRegister, repo: UserActivityRepository = Depends(get_repo)):
     try:
-        # Validar asociación existente
         if not repo.get_association(user.association_id):
             raise HTTPException(status_code=404, detail="Asociación no encontrada")
-        # Forzamos rol por defecto en registro
         user_data = user.dict()
         user_data["role"] = "user"
         repo.create_user(User(**user_data))
         return StandardResponse(status=status.HTTP_201_CREATED, message="usuario creado", data=None)
     except Exception as exc:  # noqa: BLE001
-        # Posible violación de unique
         raise HTTPException(status_code=400, detail="Teléfono o identificación ya registrados") from exc
 
 
@@ -143,6 +175,54 @@ async def get_user(user_id: int, repo: UserActivityRepository = Depends(get_repo
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     return StandardResponse(status=status.HTTP_200_OK, message="usuario encontrado", data=user)
+
+
+@router.post(
+    "/users/admin-create",
+    status_code=status.HTTP_201_CREATED,
+    response_model=StandardResponse,
+    summary="Crear usuario (admin)",
+    description="Permite a un admin crear usuarios y asignar rol.",
+)
+async def admin_create_user(
+    payload: AdminUserCreate,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    _ensure_admin(current_user)
+    if payload.association_id and not repo.get_association(payload.association_id):
+        raise HTTPException(status_code=404, detail="Asociación no encontrada")
+    try:
+        repo.create_user(User(**payload.dict()))
+        return StandardResponse(status=status.HTTP_201_CREATED, message="usuario creado", data=None)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Teléfono o identificación ya registrados") from exc
+
+
+@router.put(
+    "/users/{user_id}",
+    response_model=StandardResponse,
+    summary="Actualizar usuario (admin)",
+    description="Permite a un admin editar datos y rol del usuario.",
+)
+async def admin_update_user(
+    user_id: int,
+    payload: UserUpdate,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    _ensure_admin(current_user)
+    if payload.association_id and not repo.get_association(payload.association_id):
+        raise HTTPException(status_code=404, detail="Asociación no encontrada")
+    if not repo.get_user_by_id(user_id):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    try:
+        updated = repo.update_user(user_id, payload)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Datos no válidos o duplicados") from exc
+    if not updated:
+        raise HTTPException(status_code=400, detail="Nada para actualizar")
+    return StandardResponse(status=status.HTTP_200_OK, message="usuario actualizado", data=None)
 
 
 @router.post(

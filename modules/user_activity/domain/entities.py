@@ -9,6 +9,15 @@ class AssociationListItem(BaseModel):
     municipality: Optional[str] = Field(None, description="Municipio (ciudad) de la asociación")
 
 
+class AssociationCreate(BaseModel):
+    name: str
+    latitude: Optional[float] = Field(None, description="Latitud en decimal")
+    longitude: Optional[float] = Field(None, description="Longitud en decimal")
+    department: Optional[str] = None
+    municipality: Optional[str] = None
+    vereda: Optional[str] = None
+
+
 class Association(BaseModel):
     id: Optional[int] = None
     name: str
@@ -18,6 +27,15 @@ class Association(BaseModel):
     municipality: Optional[str] = None
     vereda: Optional[str] = None
     created_at: Optional[datetime] = None
+
+
+class AssociationUpdate(BaseModel):
+    name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    department: Optional[str] = None
+    municipality: Optional[str] = None
+    vereda: Optional[str] = None
 
 
 class User(BaseModel):
@@ -51,6 +69,24 @@ class UserRegister(BaseModel):
             }
         }
 
+
+class AdminUserCreate(BaseModel):
+    name: str
+    phone: str
+    identification: str
+    email: Optional[str] = None
+    password: str
+    association_id: Optional[int] = Field(None, description="Asociación a la que se vincula el usuario")
+    role: str = Field(default="user", description="Rol a asignar (user/admin)")
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    identification: Optional[str] = None
+    email: Optional[str] = None
+    association_id: Optional[int] = None
+    role: Optional[str] = None
 class UserPublic(BaseModel):
     id: int
     name: str
