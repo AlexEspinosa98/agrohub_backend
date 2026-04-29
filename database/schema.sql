@@ -239,3 +239,98 @@ EXECUTE FUNCTION update_happiness_votes_updated_at();
 COMMENT ON TABLE happiness_votes IS 'Almacena las votaciones de felicidad de los usuarios';
 COMMENT ON COLUMN happiness_votes.email IS 'Email del votante (único)';
 COMMENT ON COLUMN happiness_votes.vote IS 'Voto de felicidad en una escala de 1 a 5';
+
+-- ========================================
+-- TABLAS MySQL — ENCUESTA NUTRICIONAL SAN
+-- (base de datos: agrohub, motor: InnoDB)
+-- ========================================
+
+CREATE TABLE IF NOT EXISTS encuestas_nutricionales (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    numero_encuesta VARCHAR(50) UNIQUE,               -- generado automáticamente: SAN-YYYYMMDD-NNNNNN
+
+    -- Encabezado de identificación (obligatorio)
+    nombre_encuestador      VARCHAR(255)  NOT NULL,
+    cedula_encuestador      VARCHAR(50)   NOT NULL,
+    fecha_aplicacion        DATE          NOT NULL,
+    codigo_cuestionario     VARCHAR(100),
+    municipio               VARCHAR(100)  NOT NULL,   -- Algarrobo | Fundación | Aracataca | El Retén
+    vereda_comunidad        VARCHAR(255)  NOT NULL,
+
+    -- Sección A — Datos sociodemográficos
+    nombre_participante     VARCHAR(255),
+    edad_anios              INT,                      -- 0–120
+    sexo                    VARCHAR(20),              -- Hombre | Mujer | Otro
+    area_residencia         VARCHAR(20),              -- Rural | Urbana
+    nivel_educativo         VARCHAR(50),              -- Ninguno | Primaria | Secundaria | Técnico | Universitario
+    num_personas_hogar      INT,                      -- ≥ 1
+    num_mujeres_hogar       INT,                      -- ≥ 0
+    hay_menores_18          BOOLEAN,                  -- FALSE=No | TRUE=Sí
+    num_ninos_menores_5     INT,                      -- ≥ 0
+    fuente_ingreso_principal VARCHAR(100),            -- Empleo/negocio | Ayudas del gobierno | Jornalero | Cría y venta de animales
+    tiene_huerta_o_animales BOOLEAN,                  -- FALSE=No | TRUE=Sí
+    jefatura_hogar          VARCHAR(50),              -- Padre | Madre | Hijo/a | Abuelo/a | Varios | Otro
+    estabilidad_ingreso     VARCHAR(100),             -- Fijo todos los meses | Variable (temporadas) | Sin ingreso fijo
+
+    -- Sección B — Estado nutricional
+    percepcion_estado_nutricional VARCHAR(20),        -- Muy bajo | Bajo | Adecuado | Alto | Muy alto
+    cambio_peso_no_intencional    BOOLEAN,            -- FALSE=No | TRUE=Sí
+    nino_en_control_crecimiento   VARCHAR(10),        -- Sí | No | N/A
+    peso_kg                       DECIMAL(6,2),
+    talla_cm                      DECIMAL(6,2),
+    circunferencia_cintura_cm     DECIMAL(6,2),       -- solo adultos ≥18 años
+    perimetro_brazo_cm            DECIMAL(6,2),       -- niños 0–59m, adolescentes, adultos
+    grupo_perimetro_brazo         VARCHAR(30),        -- Niño <5 años | Adolescente | Adulto
+    imc_calculado                 DECIMAL(6,2),       -- kg/m² — solo adultos ≥18 años
+
+    -- Sección C — Diversidad dietética (días consumidos últimos 7 días, 0–7)
+    dias_cereales_tuberculos      INT,
+    dias_leguminosas              INT,
+    dias_carnes_pescado_huevo     INT,
+    dias_lacteos                  INT,
+    dias_frutas                   INT,
+    dias_verduras                 INT,
+    dias_grasas                   INT,
+    dias_azucares_ultraprocesados INT,
+    puntaje_diversidad_dietetica  INT,                -- 0–8
+
+    -- Sección C — Frecuencia de consumo
+    frecuencia_frutas_semana      VARCHAR(30),        -- Ninguno | 1–2 días | 3–4 días | 5–7 días
+    frecuencia_verduras_semana    VARCHAR(30),
+    frecuencia_bebidas_azucaradas VARCHAR(30),        -- Nunca | 1–2 veces/semana | 3–4 veces/semana | Diario
+
+    -- Sección C — Prácticas alimentarias
+    comidas_por_dia               VARCHAR(20),        -- 1 | 2 | 3 | 4 o más
+    frecuencia_comida_fuera_hogar VARCHAR(30),        -- Nunca | 1–2/semana | 3–4/semana | Diario
+    proporcion_autoconsumo        VARCHAR(30),        -- Nada | Poca | La mitad | La mayoría
+    alimentos_preferidos          TEXT,               -- JSON array, máx. 5 ítems
+
+    -- Sección D — Seguridad alimentaria (ELCSA adaptada)
+    preocupacion_alimentos_acabaran  BOOLEAN,         -- FALSE=No | TRUE=Sí
+    alimentos_se_acabaron            BOOLEAN,
+    adulto_omitio_comida_principal   BOOLEAN,
+    sintio_hambre_sin_comer          BOOLEAN,
+    puntaje_inseguridad_alimentaria  INT,             -- 0–4 (calculado)
+    clasificacion_seguridad_alimentaria VARCHAR(60),  -- Seguridad alimentaria | Inseguridad leve | Inseguridad moderada | Inseguridad severa
+
+    -- Cierre (obligatorio)
+    consentimiento_informado    BOOLEAN      NOT NULL, -- FALSE=No | TRUE=Sí (Firma/Huella)
+    cedula_participante         VARCHAR(50)  NOT NULL,
+    observaciones_encuestador   TEXT,
+
+    -- Metadata (soft delete)
+    is_active   BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted_at  TIMESTAMP   NULL
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Índices para los filtros del GET general
+CREATE INDEX IF NOT EXISTS idx_enc_nut_encuestador  ON encuestas_nutricionales (nombre_encuestador);
+CREATE INDEX IF NOT EXISTS idx_enc_nut_cedula_enc   ON encuestas_nutricionales (cedula_encuestador);
+CREATE INDEX IF NOT EXISTS idx_enc_nut_municipio    ON encuestas_nutricionales (municipio);
+CREATE INDEX IF NOT EXISTS idx_enc_nut_vereda       ON encuestas_nutricionales (vereda_comunidad(50));
+CREATE INDEX IF NOT EXISTS idx_enc_nut_numero       ON encuestas_nutricionales (numero_encuesta);
+CREATE INDEX IF NOT EXISTS idx_enc_nut_cedula_part  ON encuestas_nutricionales (cedula_participante);
+CREATE INDEX IF NOT EXISTS idx_enc_nut_is_active    ON encuestas_nutricionales (is_active);

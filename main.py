@@ -27,6 +27,9 @@ from data_characterization.infrastructure.routes.data_characterization_routes im
 from modules.hub_cgsm.infrastructure_hub_cgsm.routes.hub_cgsm_routes import (
     router as hub_cgsm_router,
 )
+from modules.encuesta_nutricional.infrastructure.routes.encuesta_nutricional_routes import (
+    router as encuesta_nutricional_router,
+)
 from modules.user_activity.infrastructure.routes.user_routes import (
     router as user_activity_router,
 )
@@ -85,6 +88,7 @@ async def log_requests(request: Request, call_next):
 app.include_router(data_characterization_router)
 app.include_router(hub_cgsm_router)
 app.include_router(user_activity_router)
+app.include_router(encuesta_nutricional_router)
 
 
 @app.get("/")
