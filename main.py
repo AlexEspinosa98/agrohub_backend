@@ -42,10 +42,16 @@ ENABLE_TRANSCRIBE = os.getenv("ENABLE_TRANSCRIBE", "false").lower() == "true"
 app = FastAPI(
     title="AgroHub Magdalena API",
     description=(
-        "API para transcripción de audio y sincronización de datos de familias rurales. "
-        "Incluye módulos de caracterización, hub CGSM y actividad de usuarios. "
-        "Consulta la sección 'User Activity' para ver el flujo completo de registro, login "
-        "con rol por defecto `user` y gestión de bitácoras con autenticación por token."
+        "API para transcripción de audio y sincronización de datos de familias rurales.\n\n"
+        "**Módulos disponibles:**\n"
+        "- **Data Characterization**: encuestas AgroHub, educativa y de derecho humano alimentario.\n"
+        "- **Hub CGSM**: actores, faenas, puntos de acopio y monitoreos ambientales.\n"
+        "- **User Activity**: registro, login (rol `user` por defecto) y bitácoras con token.\n"
+        "- **Encuesta Nutricional SAN**: encuestas de seguridad alimentaria y nutricional por hogar. "
+        "Cada encuesta registra datos del hogar (secciones A, C y D/ELCSA) y los datos individuales "
+        "de cada miembro (sección B — mediciones antropométricas) vinculados a una tabla maestra de "
+        "participantes (`personas_nutricionales`) mediante FK. "
+        "Un mismo participante puede aparecer en múltiples encuestas a lo largo del tiempo."
     ),
     version="1.0.0",
 )
