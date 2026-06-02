@@ -1,3 +1,7 @@
+import json
+import os
+import re
+import uuid
 from datetime import date
 from typing import Optional, Any, List
 
@@ -10,6 +14,8 @@ from modules.user_activity.domain.entities import (
     AssociationListItem,
     AssociationCreate,
     AssociationUpdate,
+    ChatRequest,
+    ChatResponse,
     Logbook,
     LogbookCreate,
     LogbookUpdate,
@@ -23,6 +29,84 @@ from modules.user_activity.domain.entities import (
 from modules.user_activity.infrastructure.repositories.postgres_repository import (
     UserActivityRepository,
 )
+
+_GEMINI_SYSTEM_PROMPT = """
+Eres el asistente virtual de AgroHub Magdalena, una plataforma para agricultores y comunidades rurales del Caribe colombiano.
+
+Puedes ayudar con dos cosas:
+1. Responder preguntas generales sobre AgroHub, asociaciones, cómo usar la app y actividades agrícolas o rurales.
+2. Registrar bitácoras de actividad del usuario.
+
+Una bitácora tiene CUATRO campos obligatorios:
+- Título: nombre corto de la actividad (ej: "Siembra de maíz", "Reunión de la asociación")
+- Descripción: detalle de lo que se realizó
+- Fecha de la actividad: en formato YYYY-MM-DD
+- Asociación: a cuál de las asociaciones registradas pertenece esta actividad
+
+FLUJO PARA REGISTRAR UNA BITÁCORA:
+1. Recoge el título, descripción y fecha de la actividad.
+2. Si el usuario no ha indicado la asociación, muéstrale la lista numerada que se te proporcionará y pídele que responda con el NÚMERO o el NOMBRE de su asociación.
+3. Una vez tengas los cuatro datos, emite EXACTAMENTE el bloque <BITACORA> con el JSON, seguido del mensaje de confirmación.
+
+Cuando tengas todos los datos, responde EXACTAMENTE así (sustituye los valores entre corchetes por los datos reales, incluyendo el nombre completo de la asociación tal como aparece en la lista):
+
+<BITACORA>
+{"titulo": "...", "descripcion": "...", "fecha_actividad": "YYYY-MM-DD", "association_id": <ID_NUMERICO>}
+</BITACORA>
+
+✅ Bitácora registrada exitosamente.
+
+📋 Resumen de tu actividad:
+• Título: [escribe el título real de la actividad]
+• Fecha: [escribe la fecha en formato DD/MM/YYYY]
+• Asociación: [escribe el NOMBRE COMPLETO de la asociación, exactamente como aparece en la lista de arriba]
+• Descripción: [escribe la descripción real]
+
+¿Deseas registrar otra actividad o tienes alguna pregunta?
+
+REGLAS IMPORTANTES:
+- Nunca emitas el bloque <BITACORA> sin el campo association_id.
+- Si el usuario escribe un número, mapéalo al ID correspondiente de la lista. Si escribe un nombre, búscalo en la lista y usa su ID.
+- Si el nombre no coincide exactamente, elige el más parecido y confírmalo.
+- Si al usuario le falta algún dato, pregunta amablemente por el que falta.
+- Si el usuario saluda, salúdalo y pregúntale si desea registrar una actividad o tiene alguna duda.
+- Responde siempre en español con un tono amigable y cercano para comunidades rurales.
+"""
+
+
+def _parse_logbook_tag(text: str) -> tuple:
+    """Extrae datos de bitácora del tag <BITACORA>...</BITACORA>. Retorna (datos_dict, mensaje_limpio)."""
+    match = re.search(r"<BITACORA>(.*?)</BITACORA>", text, re.DOTALL)
+    if not match:
+        return None, text
+    try:
+        data = json.loads(match.group(1).strip())
+        clean_message = text[match.end():].strip()
+        return data, clean_message
+    except (json.JSONDecodeError, KeyError):
+        return None, text
+
+
+def _call_gemini(api_key: str, system_prompt: str, history: list, user_message: str) -> str:
+    try:
+        import google.generativeai as genai
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="google-generativeai no está instalado en este entorno",
+        ) from exc
+
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(
+        model_name="gemini-1.5-flash",
+        system_instruction=system_prompt,
+    )
+    gemini_history = [
+        {"role": msg["role"], "parts": [msg["content"]]} for msg in history
+    ]
+    chat = model.start_chat(history=gemini_history)
+    response = chat.send_message(user_message)
+    return response.text
 
 router = APIRouter(prefix="/user-activity", tags=["User Activity"])
 
@@ -369,3 +453,90 @@ async def get_logbook(
     if logbook["user_id"] != current_user["id"]:
         raise HTTPException(status_code=403, detail="No autorizado para esta bitácora")
     return StandardResponse(status=status.HTTP_200_OK, message="bitácora encontrada", data=_sanitize_logbook(logbook))
+
+
+@router.post(
+    "/chat",
+    response_model=ChatResponse,
+    summary="Chat asistente AgroHub (IA)",
+    description=(
+        "Conversación con el asistente de AgroHub impulsado por Gemini. "
+        "Mantén el `session_id` entre mensajes para continuar la misma conversación. "
+        "El asistente puede responder preguntas generales y guiar al usuario para registrar bitácoras."
+    ),
+)
+async def chat_with_assistant(
+    payload: ChatRequest,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY no configurada en el servidor")
+
+    session_id = payload.session_id or str(uuid.uuid4())
+
+    history = repo.get_chat_history(session_id=session_id, user_id=current_user["id"], limit=10)
+
+    associations = repo.list_associations()
+    assoc_by_id = {a["id"]: a for a in associations}
+
+    if associations:
+        assoc_lines = "\n".join(
+            f"{i + 1}. {a['name']}"
+            + (f" — {a['municipality']}" if a.get("municipality") else "")
+            + f" (ID interno: {a['id']})"
+            for i, a in enumerate(associations)
+        )
+        assoc_context = f"\n\nAsociaciones registradas en AgroHub (usa el ID interno en el JSON):\n{assoc_lines}"
+    else:
+        assoc_context = "\n\n(No hay asociaciones registradas aún.)"
+
+    system_prompt = (
+        f"{_GEMINI_SYSTEM_PROMPT}"
+        f"{assoc_context}\n\n"
+        f"El usuario se llama {current_user['name']}."
+    )
+
+    raw_reply = _call_gemini(
+        api_key=api_key,
+        system_prompt=system_prompt,
+        history=history,
+        user_message=payload.message,
+    )
+
+    logbook_data, reply_text = _parse_logbook_tag(raw_reply)
+
+    created_logbook = None
+    required_keys = ("titulo", "descripcion", "fecha_actividad", "association_id")
+    if logbook_data and all(k in logbook_data for k in required_keys):
+        try:
+            activity_date = date.fromisoformat(logbook_data["fecha_actividad"])
+            association_id = int(logbook_data["association_id"])
+            assoc_info = assoc_by_id.get(association_id)
+            logbook_entity = Logbook(
+                user_id=current_user["id"],
+                association_id=association_id if assoc_info else None,
+                title=logbook_data["titulo"],
+                description=logbook_data["descripcion"],
+                activity_date=activity_date,
+            )
+            logbook_id = repo.create_logbook(logbook_entity)
+            created_logbook = {
+                "id": logbook_id,
+                "title": logbook_data["titulo"],
+                "description": logbook_data["descripcion"],
+                "activity_date": logbook_data["fecha_actividad"],
+                "association_id": association_id if assoc_info else None,
+                "association_name": assoc_info["name"] if assoc_info else None,
+            }
+        except (ValueError, Exception):
+            reply_text = (
+                "Tuve un problema al registrar la bitácora. "
+                "¿Puedes verificar que la fecha esté en formato correcto (YYYY-MM-DD)?"
+            )
+
+    repo.add_chat_message(session_id=session_id, user_id=current_user["id"], role="user", content=payload.message)
+    repo.add_chat_message(session_id=session_id, user_id=current_user["id"], role="model", content=reply_text)
+
+    return ChatResponse(reply=reply_text, session_id=session_id, logbook_created=created_logbook)

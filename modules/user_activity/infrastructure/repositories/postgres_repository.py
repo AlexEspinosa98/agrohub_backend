@@ -68,6 +68,20 @@ class UserActivityRepository:
                 ) ENGINE=InnoDB;
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS conversations (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    session_id VARCHAR(36) NOT NULL,
+                    user_id INT NOT NULL,
+                    role ENUM('user', 'model') NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_conv_session (session_id),
+                    CONSTRAINT fk_conv_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB;
+                """
+            )
 
     # Users
     def create_user(self, user: User) -> int:
@@ -296,3 +310,24 @@ class UserActivityRepository:
         with get_db_cursor() as cur:
             cur.execute(query, params)
             return cur.fetchall()
+
+    # Conversations (chat con IA)
+    def add_chat_message(self, session_id: str, user_id: int, role: str, content: str) -> None:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "INSERT INTO conversations (session_id, user_id, role, content) VALUES (%s, %s, %s, %s)",
+                (session_id, user_id, role, content),
+            )
+
+    def get_chat_history(self, session_id: str, user_id: int, limit: int = 10) -> List[dict]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT role, content FROM conversations
+                WHERE session_id = %s AND user_id = %s
+                ORDER BY created_at DESC LIMIT %s
+                """,
+                (session_id, user_id, limit),
+            )
+            rows = cur.fetchall()
+        return list(reversed(rows))

@@ -120,3 +120,14 @@ class LogbookUpdate(BaseModel):
     description: Optional[str] = None
     activity_date: Optional[date] = None
     association_id: Optional[int] = None
+
+
+class ChatRequest(BaseModel):
+    message: str
+    session_id: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    reply: str
+    session_id: str
+    logbook_created: Optional[dict] = None

@@ -175,26 +175,40 @@ MÓDULO: ENCUESTA NUTRICIONAL SAN (Seguridad Alimentaria y Nutricional)
 Prefijo base: /encuesta-nutricional
 ================================================================================
 
-Resumen de endpoints:
-  POST   /encuesta-nutricional/                        Registrar encuesta nueva
-  GET    /encuesta-nutricional/                        Listar encuestas (resumen + filtros)
-  GET    /encuesta-nutricional/{numero_encuesta}       Detalle completo de una encuesta
-  PUT    /encuesta-nutricional/{numero_encuesta}        Corregir campos de una encuesta
-  DELETE /encuesta-nutricional/{numero_encuesta}        Eliminar encuesta (soft delete)
+MODELO DE DATOS — 3 tablas relacionadas:
 
-Campos OBLIGATORIOS en POST:
-  Encabezado : nombre_encuestador, cedula_encuestador, fecha_aplicacion,
-               municipio, vereda_comunidad
-  Cierre     : consentimiento_informado, cedula_participante
+  encuestas_nutricionales          → 1 registro por visita/hogar
+  personas_nutricionales           → 1 registro por participante (tabla maestra, por cédula)
+  encuesta_nutricional_miembros    → N registros por encuesta (vincula hogar ↔ persona + mediciones)
+
+  encuestas_nutricionales (1)
+      └── encuesta_nutricional_miembros (N)  [encuesta_id FK]
+               └── personas_nutricionales (1) [persona_id FK]
+
+  Un mismo participante (misma cédula) puede aparecer en múltiples encuestas
+  a lo largo del tiempo; su perfil se reutiliza/actualiza en personas_nutricionales.
+
+Resumen de endpoints:
+  POST   /encuesta-nutricional/                                  Registrar encuesta + miembros
+  GET    /encuesta-nutricional/                                  Listar encuestas (resumen + filtros)
+  GET    /encuesta-nutricional/personas/{cedula}                 Perfil maestro de un participante
+  PUT    /encuesta-nutricional/personas/{persona_id}             Actualizar perfil de participante
+  GET    /encuesta-nutricional/{numero_encuesta}                 Detalle completo con miembros
+  PUT    /encuesta-nutricional/{numero_encuesta}                 Actualizar datos del hogar
+  DELETE /encuesta-nutricional/{numero_encuesta}                 Eliminar encuesta (soft delete)
+  POST   /encuesta-nutricional/{numero_encuesta}/miembros        Agregar miembro a encuesta existente
+  GET    /encuesta-nutricional/{numero_encuesta}/miembros/{id}   Detalle de un miembro
+  PUT    /encuesta-nutricional/{numero_encuesta}/miembros/{id}   Actualizar datos de un miembro
+  DELETE /encuesta-nutricional/{numero_encuesta}/miembros/{id}   Eliminar miembro (soft delete)
 
 Número de formulario:
   Se genera automáticamente al guardar con formato SAN-YYYYMMDD-NNNNNN
   (fecha del día + ID secuencial de 6 dígitos).
-  Ejemplo: SAN-20260429-000001
+  Ejemplo: SAN-20260521-000001
 
---------------------------------------------------------------------------------
-DICCIONARIO DE VARIABLES — Tipos y restricciones de cada campo recibido
---------------------------------------------------------------------------------
+================================================================================
+DICCIONARIO DE VARIABLES
+================================================================================
 
 Leyenda de tipos:
   string   → texto libre (VARCHAR en BD)
@@ -202,61 +216,43 @@ Leyenda de tipos:
   int      → número entero
   float    → número decimal
   bool     → true / false
-  [string] → lista de strings (array JSON, se guarda como JSON en BD)
-  enum     → string con valores fijos permitidos (ver columna "Valores válidos")
+  [string] → array JSON de strings (guardado como TEXT en BD)
+  enum     → string con valores fijos (ver columna "Valores válidos")
+  object[] → array de objetos JSON (miembros)
 
-  OBL = campo obligatorio en POST
-  OPC = campo opcional (puede omitirse o enviarse null)
+  OBL = campo obligatorio    OPC = campo opcional (omitir o null)
 
---- ENCABEZADO DE IDENTIFICACIÓN ---
+--------------------------------------------------------------------------------
+CAMPOS DEL HOGAR — encuestas_nutricionales
+--------------------------------------------------------------------------------
+
+--- ENCABEZADO ---
 
   Campo                  Tipo    OBL/OPC  Restricciones / Valores válidos
   ---------------------  ------  -------  -----------------------------------------------
   nombre_encuestador     string  OBL      Texto libre, máx. 255 caracteres
   cedula_encuestador     string  OBL      Texto libre, máx. 50 caracteres
-  fecha_aplicacion       date    OBL      Formato YYYY-MM-DD  (ej. "2026-04-29")
+  fecha_aplicacion       date    OBL      Formato YYYY-MM-DD  (ej. "2026-05-21")
   codigo_cuestionario    string  OPC      Texto libre, máx. 100 caracteres
   municipio              enum    OBL      Algarrobo | Fundación | Aracataca | El Retén
   vereda_comunidad       string  OBL      Texto libre, máx. 255 caracteres
 
---- SECCIÓN A — DATOS SOCIODEMOGRÁFICOS ---
+--- SECCIÓN A — DATOS DEL HOGAR ---
 
-  Campo                  Tipo    OBL/OPC  Restricciones / Valores válidos
-  ---------------------  ------  -------  -----------------------------------------------
-  nombre_participante    string  OPC      Texto libre, máx. 255 caracteres
-  edad_anios             int     OPC      Entero entre 0 y 120
-  sexo                   enum    OPC      Hombre | Mujer | Otro
-  area_residencia        enum    OPC      Rural | Urbana
-  nivel_educativo        enum    OPC      Ninguno | Primaria | Secundaria | Técnico | Universitario
-  num_personas_hogar     int     OPC      Entero >= 1
-  num_mujeres_hogar      int     OPC      Entero >= 0
-  hay_menores_18         bool    OPC      true | false
-  num_ninos_menores_5    int     OPC      Entero >= 0
-  fuente_ingreso_        enum    OPC      Empleo/negocio | Ayudas del gobierno |
-    principal                             Jornalero | Cría y venta de animales
-  tiene_huerta_o_        bool    OPC      true | false
-    animales
-  jefatura_hogar         enum    OPC      Padre | Madre | Hijo/a | Abuelo/a | Varios | Otro
-  estabilidad_ingreso    enum    OPC      Fijo todos los meses | Variable (temporadas) |
-                                          Sin ingreso fijo
+  Campo                       Tipo  OBL/OPC  Restricciones / Valores válidos
+  --------------------------  ----  -------  -----------------------------------------------
+  num_personas_hogar          int   OPC      Entero >= 1
+  num_mujeres_hogar           int   OPC      Entero >= 0
+  hay_menores_18              bool  OPC      true | false
+  num_ninos_menores_5         int   OPC      Entero >= 0
+  fuente_ingreso_principal    enum  OPC      Empleo/negocio | Ayudas del gobierno |
+                                             Jornalero | Cría y venta de animales
+  tiene_huerta_o_animales     bool  OPC      true | false
+  jefatura_hogar              enum  OPC      Padre | Madre | Hijo/a | Abuelo/a | Varios | Otro
+  estabilidad_ingreso         enum  OPC      Fijo todos los meses | Variable (temporadas) |
+                                             Sin ingreso fijo
 
---- SECCIÓN B — ESTADO NUTRICIONAL ---
-
-  Campo                        Tipo   OBL/OPC  Restricciones / Valores válidos
-  ---------------------------  -----  -------  -----------------------------------------------
-  percepcion_estado_           enum   OPC      Muy bajo | Bajo | Adecuado | Alto | Muy alto
-    nutricional
-  cambio_peso_no_intencional   bool   OPC      true | false
-  nino_en_control_crecimiento  enum   OPC      Sí | No | N/A
-  peso_kg                      float  OPC      Decimal positivo  (ej. 61.5)  — unidad: kg
-  talla_cm                     float  OPC      Decimal positivo  (ej. 158.0) — unidad: cm
-  circunferencia_cintura_cm    float  OPC      Decimal positivo — solo adultos >= 18 años
-  perimetro_brazo_cm           float  OPC      Decimal positivo — niños 0-59m, adolescentes, adultos
-  grupo_perimetro_brazo        enum   OPC      Niño <5 años | Adolescente | Adulto
-  imc_calculado                float  OPC      Decimal positivo — kg/m², solo adultos >= 18 años
-                                               (se puede calcular en frontend: peso/(talla_m^2))
-
---- SECCIÓN C — HÁBITOS Y PRÁCTICAS ALIMENTARIAS ---
+--- SECCIÓN C — HÁBITOS Y PRÁCTICAS ALIMENTARIAS DEL HOGAR ---
 
   Diversidad dietética (días consumidos en los últimos 7 días):
 
@@ -287,7 +283,7 @@ Leyenda de tipos:
   comidas_por_dia                enum      OPC      1 | 2 | 3 | 4 o más
   frecuencia_comida_fuera_hogar  enum      OPC      Nunca | 1-2/semana | 3-4/semana | Diario
   proporcion_autoconsumo         enum      OPC      Nada | Poca | La mitad | La mayoría
-  alimentos_preferidos           [string]  OPC      Array JSON de texto libre, máx. 5 ítems
+  alimentos_preferidos           [string]  OPC      Array de texto libre, máx. 5 ítems
                                                     Ej: ["Arroz", "Plátano", "Fríjol"]
 
 --- SECCIÓN D — SEGURIDAD ALIMENTARIA (ELCSA adaptada) ---
@@ -299,48 +295,112 @@ Leyenda de tipos:
   adulto_omitio_comida_principal      bool  OPC      true | false
   sintio_hambre_sin_comer             bool  OPC      true | false
   puntaje_inseguridad_alimentaria     int   OPC      Entero entre 0 y 4 (suma de los 4 bool anteriores)
-  clasificacion_seguridad_            enum  OPC      Seguridad alimentaria | Inseguridad leve |
-    alimentaria                                      Inseguridad moderada | Inseguridad severa
+  clasificacion_seguridad_alimentaria enum  OPC      Seguridad alimentaria | Inseguridad leve |
+                                                     Inseguridad moderada | Inseguridad severa
 
-  Regla de clasificación sugerida (ELCSA):
-    0 respuestas "true"  → Seguridad alimentaria
-    1 respuesta  "true"  → Inseguridad leve
-    2-3 respuestas "true"→ Inseguridad moderada
-    4 respuestas "true"  → Inseguridad severa
+  Regla de clasificación (ELCSA):
+    0 respuestas true → Seguridad alimentaria
+    1 respuesta  true → Inseguridad leve
+    2-3 respuestas true → Inseguridad moderada
+    4 respuestas true → Inseguridad severa
 
 --- CIERRE ---
 
   Campo                       Tipo    OBL/OPC  Restricciones
   --------------------------  ------  -------  -----------------------------------------------
-  consentimiento_informado    bool    OBL      true | false  (firma o huella del participante)
-  cedula_participante         string  OBL      Texto libre, máx. 50 caracteres
+  consentimiento_informado    bool    OBL      true | false
   observaciones_encuestador   string  OPC      Texto libre sin límite
 
---- CAMPOS GENERADOS POR EL SISTEMA (no se envían en POST ni PUT) ---
+--- ARRAY DE MIEMBROS (obligatorio en POST, mínimo 1) ---
 
+  Campo    Tipo      OBL/OPC  Descripción
+  -------  --------  -------  -----------------------------------------------
+  miembros object[]  OBL      Array con los datos de cada persona del hogar.
+                               Ver sección siguiente para campos de cada objeto.
+
+--------------------------------------------------------------------------------
+CAMPOS DE CADA MIEMBRO — encuesta_nutricional_miembros + personas_nutricionales
+--------------------------------------------------------------------------------
+
+  Los campos de identificación y perfil se guardan/actualizan en personas_nutricionales
+  usando la cédula como clave única. Las mediciones van en encuesta_nutricional_miembros.
+
+--- IDENTIFICACIÓN Y PERFIL (personas_nutricionales) ---
+
+  Campo                  Tipo    OBL/OPC  Restricciones / Valores válidos
+  ---------------------  ------  -------  -----------------------------------------------
+  cedula_participante    string  OBL      Texto libre, máx. 50 caracteres (clave única)
+  nombre_participante    string  OPC      Texto libre, máx. 255 caracteres
+  edad_anios             int     OPC      Entero entre 0 y 120
+  sexo                   enum    OPC      Hombre | Mujer | Otro
+  area_residencia        enum    OPC      Rural | Urbana
+  nivel_educativo        enum    OPC      Ninguno | Primaria | Secundaria | Técnico | Universitario
+
+--- SECCIÓN B — ESTADO NUTRICIONAL (encuesta_nutricional_miembros) ---
+
+  Campo                        Tipo   OBL/OPC  Restricciones / Valores válidos
+  ---------------------------  -----  -------  -----------------------------------------------
+  percepcion_estado_nutricional enum  OPC      Muy bajo | Bajo | Adecuado | Alto | Muy alto
+  cambio_peso_no_intencional   bool   OPC      true | false
+  nino_en_control_crecimiento  enum   OPC      Sí | No | N/A
+  peso_kg                      float  OPC      Decimal positivo (ej. 61.5) — unidad: kg
+  talla_cm                     float  OPC      Decimal positivo (ej. 158.0) — unidad: cm
+  circunferencia_cintura_cm    float  OPC      Decimal positivo — solo adultos >= 18 años
+  perimetro_brazo_cm           float  OPC      Decimal positivo — niños 0-59m, adolescentes, adultos
+  grupo_perimetro_brazo        enum   OPC      Niño <5 años | Adolescente | Adulto
+  imc_calculado                float  OPC      Decimal positivo — kg/m², solo adultos >= 18 años
+                                               (calcular en frontend: peso_kg / (talla_m)^2)
+
+--------------------------------------------------------------------------------
+CAMPOS GENERADOS POR EL SISTEMA (no se envían en POST ni PUT)
+--------------------------------------------------------------------------------
+
+  En encuestas_nutricionales:
   Campo            Tipo      Descripción
   ---------------  --------  -----------------------------------------------
   numero_encuesta  string    Generado automáticamente: SAN-YYYYMMDD-NNNNNN
-  id               int       ID autoincremental interno de la BD
+  id               int       ID autoincremental interno
   is_active        bool      true por defecto; false al hacer DELETE
-  created_at       datetime  Timestamp de creación (UTC, formato ISO 8601)
-  updated_at       datetime  Timestamp de última modificación (UTC)
-  deleted_at       datetime  Timestamp de eliminación; null si no fue eliminada
+  created_at       datetime  Timestamp de creación (ISO 8601)
+  updated_at       datetime  Timestamp de última modificación
+  deleted_at       datetime  Timestamp de eliminación; null si activa
 
---------------------------------------------------------------------------------
-Historia US-01: Registrar encuesta completa
---------------------------------------------------------------------------------
-- Como encuestador de campo, quiero guardar una encuesta con todas las secciones
-  diligenciadas, para tener el registro nutricional completo del participante.
+  En personas_nutricionales:
+  Campo       Tipo      Descripción
+  ----------  --------  -----------------------------------------------
+  id          int       ID autoincremental interno
+  is_active   bool      true por defecto
+  created_at  datetime  Timestamp de creación
+  updated_at  datetime  Timestamp de última modificación
+
+  En encuesta_nutricional_miembros:
+  Campo       Tipo      Descripción
+  ----------  --------  -----------------------------------------------
+  id          int       ID autoincremental interno
+  encuesta_id int       FK a encuestas_nutricionales.id
+  persona_id  int       FK a personas_nutricionales.id
+  is_active   bool      true por defecto; false al hacer DELETE miembro
+  created_at  datetime  Timestamp de creación
+  updated_at  datetime  Timestamp de última modificación
+  deleted_at  datetime  Timestamp de eliminación; null si activo
+
+================================================================================
+Historia US-01: Registrar encuesta con núcleo familiar completo
+================================================================================
+- Como encuestador de campo, quiero registrar una encuesta con todos los datos
+  del hogar y las mediciones de cada miembro de la familia en un solo envío,
+  para no hacer múltiples peticiones desde el dispositivo móvil.
 - Endpoint: POST /encuesta-nutricional/
 - Criterios de aceptación:
-  * Campos del encabezado y cierre son obligatorios; el resto es opcional.
+  * El array "miembros" es obligatorio y debe tener al menos 1 elemento.
+  * Cada miembro requiere solo cedula_participante; el resto de sus campos es opcional.
+  * Si una cédula ya existe en personas_nutricionales, se actualiza su perfil con
+    los datos nuevos; si no existe, se crea un registro nuevo.
+  * Todo el proceso es transaccional: si falla un miembro, se revierte todo.
   * El numero_encuesta se genera automáticamente (no se envía en el body).
-  * La respuesta devuelve el id y el numero_encuesta generado.
-  * municipio admite solo: Algarrobo, Fundación, Aracataca, El Retén.
-  * alimentos_preferidos acepta máximo 5 ítems.
+  * La respuesta devuelve id, numero_encuesta y miembros_creados.
 
-- Ejemplo curl (encuesta completa):
+- Ejemplo curl — hogar con 3 miembros (madre, padre, niño):
   curl -X POST \
     'https://backend.agroshub.online/encuesta-nutricional/' \
     -H 'accept: application/json' \
@@ -348,34 +408,19 @@ Historia US-01: Registrar encuesta completa
     -d '{
       "nombre_encuestador": "Laura Martínez Pérez",
       "cedula_encuestador": "1073512890",
-      "fecha_aplicacion": "2026-04-29",
+      "fecha_aplicacion": "2026-05-21",
       "codigo_cuestionario": "FUNDA-2026-001",
       "municipio": "Fundación",
       "vereda_comunidad": "El Progreso",
 
-      "nombre_participante": "Rosa Elena Díaz",
-      "edad_anios": 42,
-      "sexo": "Mujer",
-      "area_residencia": "Rural",
-      "nivel_educativo": "Primaria",
-      "num_personas_hogar": 5,
-      "num_mujeres_hogar": 3,
+      "num_personas_hogar": 3,
+      "num_mujeres_hogar": 1,
       "hay_menores_18": true,
       "num_ninos_menores_5": 1,
       "fuente_ingreso_principal": "Jornalero",
       "tiene_huerta_o_animales": true,
       "jefatura_hogar": "Madre",
       "estabilidad_ingreso": "Variable (temporadas)",
-
-      "percepcion_estado_nutricional": "Adecuado",
-      "cambio_peso_no_intencional": false,
-      "nino_en_control_crecimiento": "Sí",
-      "peso_kg": 61.5,
-      "talla_cm": 158.0,
-      "circunferencia_cintura_cm": 82.0,
-      "perimetro_brazo_cm": 27.5,
-      "grupo_perimetro_brazo": "Adulto",
-      "imc_calculado": 24.63,
 
       "dias_cereales_tuberculos": 7,
       "dias_leguminosas": 4,
@@ -402,8 +447,60 @@ Historia US-01: Registrar encuesta completa
       "clasificacion_seguridad_alimentaria": "Inseguridad leve",
 
       "consentimiento_informado": true,
-      "cedula_participante": "49785612",
-      "observaciones_encuestador": "Participante colaboradora. Huerta con cilantro y tomate."
+      "observaciones_encuestador": "Huerta activa con cilantro y tomate.",
+
+      "miembros": [
+        {
+          "cedula_participante": "49785612",
+          "nombre_participante": "Rosa Elena Díaz",
+          "edad_anios": 42,
+          "sexo": "Mujer",
+          "area_residencia": "Rural",
+          "nivel_educativo": "Primaria",
+          "percepcion_estado_nutricional": "Adecuado",
+          "cambio_peso_no_intencional": false,
+          "nino_en_control_crecimiento": "N/A",
+          "peso_kg": 61.5,
+          "talla_cm": 158.0,
+          "circunferencia_cintura_cm": 82.0,
+          "perimetro_brazo_cm": 27.5,
+          "grupo_perimetro_brazo": "Adulto",
+          "imc_calculado": 24.63
+        },
+        {
+          "cedula_participante": "10538221",
+          "nombre_participante": "Manuel Díaz Torres",
+          "edad_anios": 45,
+          "sexo": "Hombre",
+          "area_residencia": "Rural",
+          "nivel_educativo": "Primaria",
+          "percepcion_estado_nutricional": "Adecuado",
+          "cambio_peso_no_intencional": false,
+          "nino_en_control_crecimiento": "N/A",
+          "peso_kg": 72.0,
+          "talla_cm": 170.0,
+          "circunferencia_cintura_cm": 91.0,
+          "perimetro_brazo_cm": 29.0,
+          "grupo_perimetro_brazo": "Adulto",
+          "imc_calculado": 24.91
+        },
+        {
+          "cedula_participante": "1001234567",
+          "nombre_participante": "Valentina Díaz",
+          "edad_anios": 3,
+          "sexo": "Mujer",
+          "area_residencia": "Rural",
+          "nivel_educativo": "Ninguno",
+          "percepcion_estado_nutricional": "Adecuado",
+          "cambio_peso_no_intencional": false,
+          "nino_en_control_crecimiento": "Sí",
+          "peso_kg": 14.2,
+          "talla_cm": 96.0,
+          "perimetro_brazo_cm": 15.8,
+          "grupo_perimetro_brazo": "Niño <5 años",
+          "imc_calculado": null
+        }
+      ]
     }'
 
 - Respuesta esperada (201):
@@ -412,22 +509,23 @@ Historia US-01: Registrar encuesta completa
     "message": "encuesta registrada",
     "data": {
       "id": 1,
-      "numero_encuesta": "SAN-20260429-000001"
+      "numero_encuesta": "SAN-20260521-000001",
+      "miembros_creados": 3
     }
   }
 
---------------------------------------------------------------------------------
-Historia US-02: Registrar encuesta mínima (solo obligatorios)
---------------------------------------------------------------------------------
-- Como encuestador con tiempo limitado, quiero guardar solo el encabezado y el
-  cierre, para completar las secciones después con un PUT.
+================================================================================
+Historia US-02: Registrar encuesta mínima (solo campos obligatorios)
+================================================================================
+- Como encuestador con tiempo limitado, quiero guardar el encabezado, consentimiento
+  y al menos un miembro con su cédula, para asegurar el número de formulario
+  y completar los datos después con PUT.
 - Endpoint: POST /encuesta-nutricional/
 - Criterios de aceptación:
-  * Solo se requieren los 7 campos obligatorios.
+  * Solo los campos OBL del hogar + miembros con cedula_participante son suficientes.
   * Los campos opcionales quedan en null en BD.
-  * Se genera el mismo numero_encuesta automático.
 
-- Ejemplo curl (encuesta mínima):
+- Ejemplo curl (encuesta mínima — 1 miembro sin mediciones):
   curl -X POST \
     'https://backend.agroshub.online/encuesta-nutricional/' \
     -H 'accept: application/json' \
@@ -435,11 +533,15 @@ Historia US-02: Registrar encuesta mínima (solo obligatorios)
     -d '{
       "nombre_encuestador": "Carlos Suárez",
       "cedula_encuestador": "1065890234",
-      "fecha_aplicacion": "2026-04-29",
+      "fecha_aplicacion": "2026-05-21",
       "municipio": "Aracataca",
       "vereda_comunidad": "Variante km 12",
       "consentimiento_informado": true,
-      "cedula_participante": "72345678"
+      "miembros": [
+        {
+          "cedula_participante": "72345678"
+        }
+      ]
     }'
 
 - Respuesta esperada (201):
@@ -448,18 +550,20 @@ Historia US-02: Registrar encuesta mínima (solo obligatorios)
     "message": "encuesta registrada",
     "data": {
       "id": 2,
-      "numero_encuesta": "SAN-20260429-000002"
+      "numero_encuesta": "SAN-20260521-000002",
+      "miembros_creados": 1
     }
   }
 
---------------------------------------------------------------------------------
-Historia US-03: Listar encuestas con filtros (GET general)
---------------------------------------------------------------------------------
+================================================================================
+Historia US-03: Listar encuestas con filtros
+================================================================================
 - Como coordinador de campo, quiero ver el resumen de todas las encuestas activas
-  con posibilidad de filtrar, para monitorear la cobertura por municipio y encuestador.
+  con el conteo de miembros, para monitorear la cobertura por municipio.
 - Endpoint: GET /encuesta-nutricional/
 - Criterios de aceptación:
-  * Devuelve solo 8 campos de resumen por encuesta.
+  * Devuelve 7 campos de resumen: numero_encuesta, nombre_encuestador,
+    cedula_encuestador, fecha_aplicacion, municipio, vereda_comunidad, total_miembros.
   * Filtros opcionales combinables: nombre_encuestador (parcial), municipio (exacto),
     vereda_comunidad (parcial), numero_encuesta (exacto), cedula_encuestador (exacto).
   * Paginación: page (default 1), page_size (default 50).
@@ -473,19 +577,19 @@ Historia US-03: Listar encuestas con filtros (GET general)
   Por municipio:
   curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/?municipio=Fundación'
 
-  Por nombre de encuestador (búsqueda parcial):
+  Por nombre de encuestador (parcial):
   curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/?nombre_encuestador=Laura'
 
   Por cédula del encuestador:
   curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/?cedula_encuestador=1073512890'
 
-  Por vereda (búsqueda parcial):
+  Por vereda (parcial):
   curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/?vereda_comunidad=Progreso'
 
   Por número de encuesta exacto:
-  curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/?numero_encuesta=SAN-20260429-000001'
+  curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/?numero_encuesta=SAN-20260521-000001'
 
-  Filtros combinados:
+  Filtros combinados con paginación:
   curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/?municipio=Fundación&nombre_encuestador=Laura&page=1&page_size=10'
 
 - Respuesta esperada (200):
@@ -494,40 +598,38 @@ Historia US-03: Listar encuestas con filtros (GET general)
     "message": "encuestas encontradas",
     "data": [
       {
-        "numero_encuesta": "SAN-20260429-000001",
+        "numero_encuesta": "SAN-20260521-000001",
         "nombre_encuestador": "Laura Martínez Pérez",
         "cedula_encuestador": "1073512890",
-        "fecha_aplicacion": "2026-04-29",
+        "fecha_aplicacion": "2026-05-21",
         "municipio": "Fundación",
         "vereda_comunidad": "El Progreso",
-        "cedula_participante": "49785612",
-        "nombre_participante": "Rosa Elena Díaz"
+        "total_miembros": 3
       },
       {
-        "numero_encuesta": "SAN-20260429-000002",
+        "numero_encuesta": "SAN-20260521-000002",
         "nombre_encuestador": "Carlos Suárez",
         "cedula_encuestador": "1065890234",
-        "fecha_aplicacion": "2026-04-29",
+        "fecha_aplicacion": "2026-05-21",
         "municipio": "Aracataca",
         "vereda_comunidad": "Variante km 12",
-        "cedula_participante": "72345678",
-        "nombre_participante": null
+        "total_miembros": 1
       }
     ]
   }
 
---------------------------------------------------------------------------------
+================================================================================
 Historia US-04: Ver detalle completo de una encuesta
---------------------------------------------------------------------------------
-- Como coordinador, quiero consultar todos los campos de una encuesta específica,
-  para revisar la información completa del participante.
+================================================================================
+- Como coordinador, quiero consultar todos los campos del hogar y los datos
+  individuales de cada miembro de una encuesta específica.
 - Endpoint: GET /encuesta-nutricional/{numero_encuesta}
 - Criterios de aceptación:
-  * Devuelve todos los campos de la encuesta incluyendo metadatos.
-  * 404 si el numero_encuesta no existe o la encuesta fue eliminada (is_active = false).
+  * Devuelve todos los campos del hogar + array "miembros" con perfil y mediciones.
+  * 404 si numero_encuesta no existe o is_active = false.
 
 - Ejemplo curl:
-  curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/SAN-20260429-000001'
+  curl -X GET 'https://backend.agroshub.online/encuesta-nutricional/SAN-20260521-000001'
 
 - Respuesta esperada (200):
   {
@@ -535,39 +637,25 @@ Historia US-04: Ver detalle completo de una encuesta
     "message": "encuesta encontrada",
     "data": {
       "id": 1,
-      "numero_encuesta": "SAN-20260429-000001",
+      "numero_encuesta": "SAN-20260521-000001",
       "is_active": true,
-      "created_at": "2026-04-29T10:35:00",
-      "updated_at": "2026-04-29T10:35:00",
+      "created_at": "2026-05-21T10:35:00",
+      "updated_at": "2026-05-21T10:35:00",
       "deleted_at": null,
       "nombre_encuestador": "Laura Martínez Pérez",
       "cedula_encuestador": "1073512890",
-      "fecha_aplicacion": "2026-04-29",
+      "fecha_aplicacion": "2026-05-21",
       "codigo_cuestionario": "FUNDA-2026-001",
       "municipio": "Fundación",
       "vereda_comunidad": "El Progreso",
-      "nombre_participante": "Rosa Elena Díaz",
-      "edad_anios": 42,
-      "sexo": "Mujer",
-      "area_residencia": "Rural",
-      "nivel_educativo": "Primaria",
-      "num_personas_hogar": 5,
-      "num_mujeres_hogar": 3,
+      "num_personas_hogar": 3,
+      "num_mujeres_hogar": 1,
       "hay_menores_18": true,
       "num_ninos_menores_5": 1,
       "fuente_ingreso_principal": "Jornalero",
       "tiene_huerta_o_animales": true,
       "jefatura_hogar": "Madre",
       "estabilidad_ingreso": "Variable (temporadas)",
-      "percepcion_estado_nutricional": "Adecuado",
-      "cambio_peso_no_intencional": false,
-      "nino_en_control_crecimiento": "Sí",
-      "peso_kg": 61.5,
-      "talla_cm": 158.0,
-      "circunferencia_cintura_cm": 82.0,
-      "perimetro_brazo_cm": 27.5,
-      "grupo_perimetro_brazo": "Adulto",
-      "imc_calculado": 24.63,
       "dias_cereales_tuberculos": 7,
       "dias_leguminosas": 4,
       "dias_carnes_pescado_huevo": 3,
@@ -591,50 +679,109 @@ Historia US-04: Ver detalle completo de una encuesta
       "puntaje_inseguridad_alimentaria": 1,
       "clasificacion_seguridad_alimentaria": "Inseguridad leve",
       "consentimiento_informado": true,
-      "cedula_participante": "49785612",
-      "observaciones_encuestador": "Participante colaboradora. Huerta con cilantro y tomate."
+      "observaciones_encuestador": "Huerta activa con cilantro y tomate.",
+      "miembros": [
+        {
+          "id": 1,
+          "encuesta_id": 1,
+          "persona_id": 1,
+          "is_active": true,
+          "created_at": "2026-05-21T10:35:00",
+          "updated_at": "2026-05-21T10:35:00",
+          "deleted_at": null,
+          "cedula_participante": "49785612",
+          "nombre_participante": "Rosa Elena Díaz",
+          "edad_anios": 42,
+          "sexo": "Mujer",
+          "area_residencia": "Rural",
+          "nivel_educativo": "Primaria",
+          "percepcion_estado_nutricional": "Adecuado",
+          "cambio_peso_no_intencional": false,
+          "nino_en_control_crecimiento": "N/A",
+          "peso_kg": 61.5,
+          "talla_cm": 158.0,
+          "circunferencia_cintura_cm": 82.0,
+          "perimetro_brazo_cm": 27.5,
+          "grupo_perimetro_brazo": "Adulto",
+          "imc_calculado": 24.63
+        },
+        {
+          "id": 2,
+          "encuesta_id": 1,
+          "persona_id": 2,
+          "is_active": true,
+          "created_at": "2026-05-21T10:35:00",
+          "updated_at": "2026-05-21T10:35:00",
+          "deleted_at": null,
+          "cedula_participante": "10538221",
+          "nombre_participante": "Manuel Díaz Torres",
+          "edad_anios": 45,
+          "sexo": "Hombre",
+          "area_residencia": "Rural",
+          "nivel_educativo": "Primaria",
+          "percepcion_estado_nutricional": "Adecuado",
+          "cambio_peso_no_intencional": false,
+          "nino_en_control_crecimiento": "N/A",
+          "peso_kg": 72.0,
+          "talla_cm": 170.0,
+          "circunferencia_cintura_cm": 91.0,
+          "perimetro_brazo_cm": 29.0,
+          "grupo_perimetro_brazo": "Adulto",
+          "imc_calculado": 24.91
+        },
+        {
+          "id": 3,
+          "encuesta_id": 1,
+          "persona_id": 3,
+          "is_active": true,
+          "created_at": "2026-05-21T10:35:00",
+          "updated_at": "2026-05-21T10:35:00",
+          "deleted_at": null,
+          "cedula_participante": "1001234567",
+          "nombre_participante": "Valentina Díaz",
+          "edad_anios": 3,
+          "sexo": "Mujer",
+          "area_residencia": "Rural",
+          "nivel_educativo": "Ninguno",
+          "percepcion_estado_nutricional": "Adecuado",
+          "cambio_peso_no_intencional": false,
+          "nino_en_control_crecimiento": "Sí",
+          "peso_kg": 14.2,
+          "talla_cm": 96.0,
+          "circunferencia_cintura_cm": null,
+          "perimetro_brazo_cm": 15.8,
+          "grupo_perimetro_brazo": "Niño <5 años",
+          "imc_calculado": null
+        }
+      ]
     }
   }
 
---------------------------------------------------------------------------------
-Historia US-05: Completar encuesta mínima (PUT con secciones completas)
---------------------------------------------------------------------------------
-- Como encuestador, quiero agregar las secciones A, B, C y D a una encuesta que
-  guardé incompleta, para no perder el número de formulario ya generado.
+================================================================================
+Historia US-05: Actualizar datos del hogar (PUT secciones C y/o D)
+================================================================================
+- Como encuestador, quiero completar o corregir los datos del hogar (secciones A,
+  C y D) sin tocar los miembros, para no repetir información ya guardada.
 - Endpoint: PUT /encuesta-nutricional/{numero_encuesta}
 - Criterios de aceptación:
-  * Solo se actualizan los campos enviados; los null en BD no se tocan.
-  * 404 si el numero_encuesta no existe.
-  * 400 si el body no contiene ningún campo.
+  * Solo se actualizan los campos enviados; los que no se envían quedan intactos.
+  * No modifica miembros; para eso usar PUT /miembros/{id}.
+  * 404 si numero_encuesta no existe. 400 si el body está vacío.
 
-- Ejemplo curl (completar secciones A, B, C, D):
+- Ejemplo curl (actualizar hábitos del hogar y ELCSA):
   curl -X PUT \
-    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260429-000002' \
+    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260521-000002' \
     -H 'accept: application/json' \
     -H 'Content-Type: application/json' \
     -d '{
-      "nombre_participante": "Pedro Antonio Gómez",
-      "edad_anios": 55,
-      "sexo": "Hombre",
-      "area_residencia": "Rural",
-      "nivel_educativo": "Ninguno",
-      "num_personas_hogar": 3,
-      "num_mujeres_hogar": 1,
-      "hay_menores_18": false,
-      "num_ninos_menores_5": 0,
+      "num_personas_hogar": 5,
+      "num_mujeres_hogar": 2,
+      "hay_menores_18": true,
+      "num_ninos_menores_5": 1,
       "fuente_ingreso_principal": "Cría y venta de animales",
       "tiene_huerta_o_animales": true,
       "jefatura_hogar": "Padre",
       "estabilidad_ingreso": "Sin ingreso fijo",
-      "percepcion_estado_nutricional": "Bajo",
-      "cambio_peso_no_intencional": true,
-      "nino_en_control_crecimiento": "N/A",
-      "peso_kg": 58.0,
-      "talla_cm": 165.0,
-      "circunferencia_cintura_cm": 88.0,
-      "perimetro_brazo_cm": 24.0,
-      "grupo_perimetro_brazo": "Adulto",
-      "imc_calculado": 21.30,
       "dias_cereales_tuberculos": 7,
       "dias_leguminosas": 2,
       "dias_carnes_pescado_huevo": 1,
@@ -657,7 +804,7 @@ Historia US-05: Completar encuesta mínima (PUT con secciones completas)
       "sintio_hambre_sin_comer": true,
       "puntaje_inseguridad_alimentaria": 4,
       "clasificacion_seguridad_alimentaria": "Inseguridad severa",
-      "observaciones_encuestador": "Hogar en condición crítica. Se recomienda remisión a programa de atención."
+      "observaciones_encuestador": "Hogar en condición crítica. Remitir a programa de atención."
     }'
 
 - Respuesta esperada (200):
@@ -667,47 +814,21 @@ Historia US-05: Completar encuesta mínima (PUT con secciones completas)
     "data": null
   }
 
---------------------------------------------------------------------------------
-Historia US-06: Corregir un dato puntual (PUT mínimo)
---------------------------------------------------------------------------------
-- Como encuestador, quiero corregir solo el peso y la talla que registré mal,
-  para que el IMC calculado sea correcto.
-- Endpoint: PUT /encuesta-nutricional/{numero_encuesta}
-- Criterios de aceptación:
-  * Se puede enviar solo 1 campo; el resto permanece intacto en BD.
-
-- Ejemplo curl (corregir solo medidas antropométricas):
-  curl -X PUT \
-    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260429-000001' \
-    -H 'accept: application/json' \
-    -H 'Content-Type: application/json' \
-    -d '{
-      "peso_kg": 63.0,
-      "talla_cm": 159.5,
-      "imc_calculado": 24.76
-    }'
-
-- Respuesta esperada (200):
-  {
-    "status": 200,
-    "message": "encuesta actualizada",
-    "data": null
-  }
-
---------------------------------------------------------------------------------
-Historia US-07: Eliminar encuesta duplicada (soft delete)
---------------------------------------------------------------------------------
-- Como coordinador, quiero desactivar una encuesta registrada por error, para que
-  no aparezca en los listados sin borrar el histórico.
+================================================================================
+Historia US-06: Eliminar encuesta duplicada (soft delete)
+================================================================================
+- Como coordinador, quiero desactivar una encuesta registrada por error sin
+  borrar el histórico.
 - Endpoint: DELETE /encuesta-nutricional/{numero_encuesta}
 - Criterios de aceptación:
-  * La encuesta queda en BD con is_active = false y deleted_at con timestamp.
-  * No se puede consultar por GET ni modificar por PUT después del delete.
-  * 404 si el numero_encuesta no existe o ya estaba eliminada.
+  * La encuesta queda con is_active = false y deleted_at con timestamp.
+  * Todos sus miembros también quedan inactivos.
+  * No aparece en GET listado ni en GET detalle después del delete.
+  * 404 si no existe o ya estaba eliminada.
 
 - Ejemplo curl:
   curl -X DELETE \
-    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260429-000002' \
+    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260521-000002' \
     -H 'accept: application/json'
 
 - Respuesta esperada (200):
@@ -717,38 +838,266 @@ Historia US-07: Eliminar encuesta duplicada (soft delete)
     "data": null
   }
 
---------------------------------------------------------------------------------
+================================================================================
+Historia US-07: Agregar miembro a encuesta ya creada
+================================================================================
+- Como encuestador, quiero agregar un miembro del hogar que no estaba presente
+  al momento del primer registro, sin tener que crear una encuesta nueva.
+- Endpoint: POST /encuesta-nutricional/{numero_encuesta}/miembros
+- Criterios de aceptación:
+  * Agrega un solo miembro por llamada.
+  * Si la cédula ya existe en personas_nutricionales, reutiliza el perfil.
+  * 404 si la encuesta no existe o fue eliminada.
+  * Devuelve el id del miembro creado y el encuesta_id.
+
+- Ejemplo curl:
+  curl -X POST \
+    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260521-000001/miembros' \
+    -H 'accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "cedula_participante": "1002345678",
+      "nombre_participante": "Samuel Díaz",
+      "edad_anios": 14,
+      "sexo": "Hombre",
+      "area_residencia": "Rural",
+      "nivel_educativo": "Secundaria",
+      "percepcion_estado_nutricional": "Adecuado",
+      "cambio_peso_no_intencional": false,
+      "nino_en_control_crecimiento": "N/A",
+      "peso_kg": 48.0,
+      "talla_cm": 155.0,
+      "circunferencia_cintura_cm": null,
+      "perimetro_brazo_cm": 22.5,
+      "grupo_perimetro_brazo": "Adolescente",
+      "imc_calculado": 19.97
+    }'
+
+- Respuesta esperada (201):
+  {
+    "status": 201,
+    "message": "miembro registrado",
+    "data": {
+      "id": 4,
+      "encuesta_id": 1
+    }
+  }
+
+================================================================================
+Historia US-08: Ver detalle de un miembro específico
+================================================================================
+- Como coordinador, quiero consultar los datos individuales de un miembro
+  puntual sin cargar toda la encuesta.
+- Endpoint: GET /encuesta-nutricional/{numero_encuesta}/miembros/{miembro_id}
+- Criterios de aceptación:
+  * Devuelve perfil de persona + mediciones de la encuesta.
+  * 404 si la encuesta o el miembro no existen o están inactivos.
+
+- Ejemplo curl:
+  curl -X GET \
+    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260521-000001/miembros/1'
+
+- Respuesta esperada (200):
+  {
+    "status": 200,
+    "message": "miembro encontrado",
+    "data": {
+      "id": 1,
+      "encuesta_id": 1,
+      "persona_id": 1,
+      "is_active": true,
+      "created_at": "2026-05-21T10:35:00",
+      "updated_at": "2026-05-21T10:35:00",
+      "deleted_at": null,
+      "cedula_participante": "49785612",
+      "nombre_participante": "Rosa Elena Díaz",
+      "edad_anios": 42,
+      "sexo": "Mujer",
+      "area_residencia": "Rural",
+      "nivel_educativo": "Primaria",
+      "percepcion_estado_nutricional": "Adecuado",
+      "cambio_peso_no_intencional": false,
+      "nino_en_control_crecimiento": "N/A",
+      "peso_kg": 61.5,
+      "talla_cm": 158.0,
+      "circunferencia_cintura_cm": 82.0,
+      "perimetro_brazo_cm": 27.5,
+      "grupo_perimetro_brazo": "Adulto",
+      "imc_calculado": 24.63
+    }
+  }
+
+================================================================================
+Historia US-09: Corregir mediciones de un miembro (PUT miembro)
+================================================================================
+- Como encuestador, quiero corregir el peso, talla o IMC de un miembro específico
+  que registré mal, sin afectar a los demás miembros ni al hogar.
+- Endpoint: PUT /encuesta-nutricional/{numero_encuesta}/miembros/{miembro_id}
+- Criterios de aceptación:
+  * Acepta cualquier combinación de campos (perfil persona y/o mediciones).
+  * Cambios en nombre_participante, edad_anios, sexo, area_residencia, nivel_educativo
+    se propagan a personas_nutricionales (afectan el perfil maestro).
+  * Cambios en Sección B solo afectan este registro de miembro.
+  * 404 si miembro o encuesta no existen. 404 si no hay cambios.
+
+- Ejemplo curl (corregir peso, talla e IMC):
+  curl -X PUT \
+    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260521-000001/miembros/1' \
+    -H 'accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "peso_kg": 63.0,
+      "talla_cm": 159.5,
+      "imc_calculado": 24.76
+    }'
+
+- Ejemplo curl (actualizar perfil + mediciones):
+  curl -X PUT \
+    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260521-000001/miembros/3' \
+    -H 'accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "nombre_participante": "Valentina Díaz García",
+      "edad_anios": 4,
+      "peso_kg": 15.1,
+      "talla_cm": 99.0,
+      "perimetro_brazo_cm": 16.2,
+      "nino_en_control_crecimiento": "Sí"
+    }'
+
+- Respuesta esperada (200):
+  {
+    "status": 200,
+    "message": "miembro actualizado",
+    "data": null
+  }
+
+================================================================================
+Historia US-10: Eliminar miembro del hogar (soft delete)
+================================================================================
+- Como encuestador, quiero desactivar el registro de un miembro que fue incluido
+  por error, sin eliminar la encuesta completa.
+- Endpoint: DELETE /encuesta-nutricional/{numero_encuesta}/miembros/{miembro_id}
+- Criterios de aceptación:
+  * Solo desactiva el registro en encuesta_nutricional_miembros (is_active = false).
+  * El perfil en personas_nutricionales permanece intacto.
+  * 404 si miembro o encuesta no existen o ya están inactivos.
+
+- Ejemplo curl:
+  curl -X DELETE \
+    'https://backend.agroshub.online/encuesta-nutricional/SAN-20260521-000001/miembros/4' \
+    -H 'accept: application/json'
+
+- Respuesta esperada (200):
+  {
+    "status": 200,
+    "message": "miembro eliminado",
+    "data": null
+  }
+
+================================================================================
+Historia US-11: Consultar perfil maestro de un participante
+================================================================================
+- Como analista, quiero buscar a un participante por su cédula para ver su perfil
+  y saber en qué encuestas ha aparecido a lo largo del tiempo.
+- Endpoint: GET /encuesta-nutricional/personas/{cedula}
+- Criterios de aceptación:
+  * Devuelve el perfil maestro almacenado en personas_nutricionales.
+  * 404 si la cédula no existe o el participante está inactivo.
+
+- Ejemplo curl:
+  curl -X GET \
+    'https://backend.agroshub.online/encuesta-nutricional/personas/49785612'
+
+- Respuesta esperada (200):
+  {
+    "status": 200,
+    "message": "participante encontrado",
+    "data": {
+      "id": 1,
+      "cedula": "49785612",
+      "nombre": "Rosa Elena Díaz",
+      "edad_anios": 42,
+      "sexo": "Mujer",
+      "area_residencia": "Rural",
+      "nivel_educativo": "Primaria",
+      "is_active": true,
+      "created_at": "2026-05-21T10:35:00",
+      "updated_at": "2026-05-21T10:35:00"
+    }
+  }
+
+================================================================================
+Historia US-12: Actualizar perfil maestro de un participante
+================================================================================
+- Como encuestador, quiero corregir el nombre o escolaridad de un participante
+  directamente en su perfil, para que el cambio aplique a todas sus encuestas.
+- Endpoint: PUT /encuesta-nutricional/personas/{persona_id}
+- Criterios de aceptación:
+  * Acepta cualquier combinación de: nombre, edad_anios, sexo, area_residencia,
+    nivel_educativo.
+  * El cambio se refleja en todas las encuestas donde aparece ese participante
+    (porque el JOIN lee de personas_nutricionales).
+  * 404 si persona_id no existe o está inactivo. 404 si no hay cambios.
+
+- Ejemplo curl:
+  curl -X PUT \
+    'https://backend.agroshub.online/encuesta-nutricional/personas/1' \
+    -H 'accept: application/json' \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "nombre": "Rosa Elena Díaz Martínez",
+      "nivel_educativo": "Secundaria"
+    }'
+
+- Respuesta esperada (200):
+  {
+    "status": 200,
+    "message": "participante actualizado",
+    "data": null
+  }
+
+================================================================================
 Errores comunes del módulo
---------------------------------------------------------------------------------
+================================================================================
   404 - Encuesta no encontrada:
         {"detail": "Encuesta no encontrada"}
+
+  404 - Miembro no encontrado:
+        {"detail": "Miembro no encontrado"}
+
+  404 - Participante no encontrado:
+        {"detail": "Participante no encontrado"}
 
   400 - PUT sin campos:
         {"detail": "Nada para actualizar"}
 
-  422 - Campo obligatorio faltante en POST (ejemplo: falta municipio):
+  422 - Campo obligatorio faltante (ej. municipio):
         {"detail": [{"loc": ["body", "municipio"], "msg": "field required", "type": "value_error.missing"}]}
 
-  422 - Valor fuera de rango (ejemplo: edad_anios: 150):
-        {"detail": [{"loc": ["body", "edad_anios"], "msg": "ensure this value is less than or equal to 120", "type": "value_error.number.not_le"}]}
+  422 - Array miembros vacío:
+        {"detail": [{"loc": ["body", "miembros"], "msg": "ensure this value has at least 1 items", "type": "value_error.list.min_items"}]}
 
---------------------------------------------------------------------------------
+  422 - Valor fuera de rango (ej. edad_anios: 150):
+        {"detail": [{"loc": ["body", "miembros", 0, "edad_anios"], "msg": "ensure this value is less than or equal to 120", "type": "value_error.number.not_le"}]}
+
+================================================================================
 Valores válidos por campo categórico
---------------------------------------------------------------------------------
-  municipio                         : Algarrobo | Fundación | Aracataca | El Retén
-  sexo                              : Hombre | Mujer | Otro
-  area_residencia                   : Rural | Urbana
-  nivel_educativo                   : Ninguno | Primaria | Secundaria | Técnico | Universitario
-  fuente_ingreso_principal          : Empleo/negocio | Ayudas del gobierno | Jornalero | Cría y venta de animales
-  jefatura_hogar                    : Padre | Madre | Hijo/a | Abuelo/a | Varios | Otro
-  estabilidad_ingreso               : Fijo todos los meses | Variable (temporadas) | Sin ingreso fijo
-  percepcion_estado_nutricional     : Muy bajo | Bajo | Adecuado | Alto | Muy alto
-  nino_en_control_crecimiento       : Sí | No | N/A
-  grupo_perimetro_brazo             : Niño <5 años | Adolescente | Adulto
-  frecuencia_frutas_semana          : Ninguno | 1-2 días | 3-4 días | 5-7 días
-  frecuencia_verduras_semana        : Ninguno | 1-2 días | 3-4 días | 5-7 días
-  frecuencia_bebidas_azucaradas     : Nunca | 1-2 veces/semana | 3-4 veces/semana | Diario
-  comidas_por_dia                   : 1 | 2 | 3 | 4 o más
-  frecuencia_comida_fuera_hogar     : Nunca | 1-2/semana | 3-4/semana | Diario
-  proporcion_autoconsumo            : Nada | Poca | La mitad | La mayoría
+================================================================================
+  municipio                          : Algarrobo | Fundación | Aracataca | El Retén
+  sexo                               : Hombre | Mujer | Otro
+  area_residencia                    : Rural | Urbana
+  nivel_educativo                    : Ninguno | Primaria | Secundaria | Técnico | Universitario
+  fuente_ingreso_principal           : Empleo/negocio | Ayudas del gobierno | Jornalero | Cría y venta de animales
+  jefatura_hogar                     : Padre | Madre | Hijo/a | Abuelo/a | Varios | Otro
+  estabilidad_ingreso                : Fijo todos los meses | Variable (temporadas) | Sin ingreso fijo
+  percepcion_estado_nutricional      : Muy bajo | Bajo | Adecuado | Alto | Muy alto
+  nino_en_control_crecimiento        : Sí | No | N/A
+  grupo_perimetro_brazo              : Niño <5 años | Adolescente | Adulto
+  frecuencia_frutas_semana           : Ninguno | 1-2 días | 3-4 días | 5-7 días
+  frecuencia_verduras_semana         : Ninguno | 1-2 días | 3-4 días | 5-7 días
+  frecuencia_bebidas_azucaradas      : Nunca | 1-2 veces/semana | 3-4 veces/semana | Diario
+  comidas_por_dia                    : 1 | 2 | 3 | 4 o más
+  frecuencia_comida_fuera_hogar      : Nunca | 1-2/semana | 3-4/semana | Diario
+  proporcion_autoconsumo             : Nada | Poca | La mitad | La mayoría
   clasificacion_seguridad_alimentaria: Seguridad alimentaria | Inseguridad leve | Inseguridad moderada | Inseguridad severa
