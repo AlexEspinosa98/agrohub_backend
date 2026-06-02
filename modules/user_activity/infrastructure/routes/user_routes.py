@@ -5,7 +5,9 @@ import uuid
 from datetime import date
 from typing import Optional, Any, List
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Security, status
+import requests as http_requests
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Security, status
+from fastapi.responses import PlainTextResponse
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
@@ -540,3 +542,165 @@ async def chat_with_assistant(
     repo.add_chat_message(session_id=session_id, user_id=current_user["id"], role="model", content=reply_text)
 
     return ChatResponse(reply=reply_text, session_id=session_id, logbook_created=created_logbook)
+
+
+# ── WhatsApp webhook (Meta Business API) ─────────────────────────────────────
+
+_WA_API_URL = "https://graph.facebook.com/v19.0"
+_WA_NO_USER_MSG = (
+    "No encontré tu número registrado en AgroHub. "
+    "Por favor regístrate primero en la aplicación para poder usar el asistente."
+)
+_WA_NO_TEXT_MSG = (
+    "Solo puedo procesar mensajes de texto por ahora. "
+    "Escríbeme qué actividad deseas registrar."
+)
+
+
+def _send_whatsapp_message(phone_number_id: str, token: str, to: str, text: str) -> None:
+    url = f"{_WA_API_URL}/{phone_number_id}/messages"
+    http_requests.post(
+        url,
+        json={
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "text",
+            "text": {"body": text},
+        },
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        timeout=10,
+    )
+
+
+def _find_user_by_wa_phone(repo: UserActivityRepository, wa_phone: str) -> Optional[dict]:
+    """WhatsApp envía el número con código de país (ej: 573001234567).
+    Intenta coincidencia exacta y luego sin el prefijo 57 de Colombia."""
+    user = repo.get_user_by_phone_or_identification(wa_phone)
+    if user:
+        return user
+    if wa_phone.startswith("57") and len(wa_phone) > 10:
+        return repo.get_user_by_phone_or_identification(wa_phone[2:])
+    return None
+
+
+def _extract_wa_payload(body: dict) -> tuple:
+    """Extrae (wa_phone, text, phone_number_id) del payload de Meta. Retorna Nones si no aplica."""
+    try:
+        change_value = body["entry"][0]["changes"][0]["value"]
+        phone_number_id = change_value["metadata"]["phone_number_id"]
+        messages = change_value.get("messages")
+        if not messages:
+            return None, None, None
+        msg = messages[0]
+        wa_phone = msg["from"]
+        text = msg["text"]["body"] if msg.get("type") == "text" else None
+        return wa_phone, text, phone_number_id
+    except (KeyError, IndexError):
+        return None, None, None
+
+
+@router.get(
+    "/whatsapp",
+    include_in_schema=False,
+)
+async def whatsapp_verify(
+    hub_mode: str = Query(None, alias="hub.mode"),
+    hub_verify_token: str = Query(None, alias="hub.verify_token"),
+    hub_challenge: str = Query(None, alias="hub.challenge"),
+):
+    """Challenge de verificación que Meta llama una sola vez al configurar el webhook."""
+    verify_token = os.getenv("WHATSAPP_VERIFY_TOKEN")
+    if hub_mode == "subscribe" and hub_verify_token == verify_token:
+        return PlainTextResponse(content=hub_challenge)
+    raise HTTPException(status_code=403, detail="Verificación fallida")
+
+
+@router.post(
+    "/whatsapp",
+    include_in_schema=False,
+)
+async def whatsapp_webhook(request: Request, repo: UserActivityRepository = Depends(get_repo)):
+    """Recibe mensajes entrantes de WhatsApp (Meta Business API)."""
+    body = await request.json()
+
+    wa_phone, text, phone_number_id = _extract_wa_payload(body)
+
+    # Si no hay mensaje de texto procesable, retornamos 200 igual (Meta lo exige)
+    if not wa_phone or not phone_number_id:
+        return {"status": "ignored"}
+
+    wa_token = os.getenv("WHATSAPP_TOKEN")
+    if not wa_token:
+        return {"status": "ignored"}
+
+    if not text:
+        _send_whatsapp_message(phone_number_id, wa_token, wa_phone, _WA_NO_TEXT_MSG)
+        return {"status": "ok"}
+
+    user = _find_user_by_wa_phone(repo, wa_phone)
+    if not user:
+        _send_whatsapp_message(phone_number_id, wa_token, wa_phone, _WA_NO_USER_MSG)
+        return {"status": "ok"}
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return {"status": "ignored"}
+
+    # El session_id de WhatsApp es el teléfono del usuario (conversación persistente por contacto)
+    session_id = f"wa_{wa_phone}"
+
+    history = repo.get_chat_history(session_id=session_id, user_id=user["id"], limit=10)
+
+    associations = repo.list_associations()
+    assoc_by_id = {a["id"]: a for a in associations}
+    if associations:
+        assoc_lines = "\n".join(
+            f"{i + 1}. {a['name']}"
+            + (f" — {a['municipality']}" if a.get("municipality") else "")
+            + f" (ID interno: {a['id']})"
+            for i, a in enumerate(associations)
+        )
+        assoc_context = f"\n\nAsociaciones registradas en AgroHub (usa el ID interno en el JSON):\n{assoc_lines}"
+    else:
+        assoc_context = "\n\n(No hay asociaciones registradas aún.)"
+
+    system_prompt = (
+        f"{_GEMINI_SYSTEM_PROMPT}"
+        f"{assoc_context}\n\n"
+        f"El usuario se llama {user['name']}."
+    )
+
+    raw_reply = _call_gemini(
+        api_key=api_key,
+        system_prompt=system_prompt,
+        history=history,
+        user_message=text,
+    )
+
+    logbook_data, reply_text = _parse_logbook_tag(raw_reply)
+
+    required_keys = ("titulo", "descripcion", "fecha_actividad", "association_id")
+    if logbook_data and all(k in logbook_data for k in required_keys):
+        try:
+            activity_date = date.fromisoformat(logbook_data["fecha_actividad"])
+            association_id = int(logbook_data["association_id"])
+            assoc_info = assoc_by_id.get(association_id)
+            logbook_entity = Logbook(
+                user_id=user["id"],
+                association_id=association_id if assoc_info else None,
+                title=logbook_data["titulo"],
+                description=logbook_data["descripcion"],
+                activity_date=activity_date,
+            )
+            repo.create_logbook(logbook_entity)
+        except (ValueError, Exception):
+            reply_text = (
+                "Tuve un problema al registrar la bitácora. "
+                "¿Puedes verificar que la fecha esté en formato correcto (YYYY-MM-DD)?"
+            )
+
+    repo.add_chat_message(session_id=session_id, user_id=user["id"], role="user", content=text)
+    repo.add_chat_message(session_id=session_id, user_id=user["id"], role="model", content=reply_text)
+
+    _send_whatsapp_message(phone_number_id, wa_token, wa_phone, reply_text)
+    return {"status": "ok"}
