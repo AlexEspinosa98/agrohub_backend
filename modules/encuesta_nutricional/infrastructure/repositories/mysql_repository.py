@@ -233,10 +233,16 @@ class EncuestaNutricionalRepository:
         values.append(persona_id)
         with get_db_cursor() as cur:
             cur.execute(
+                "SELECT 1 FROM personas_nutricionales WHERE id = %s AND is_active = 1",
+                (persona_id,),
+            )
+            if not cur.fetchone():
+                return False
+            cur.execute(
                 f"UPDATE personas_nutricionales SET {', '.join(fields)} WHERE id = %s AND is_active = 1",
                 values,
             )
-            return cur.rowcount > 0
+            return True
 
     # ------------------------------------------------------------------
     # Encuesta (hogar)
@@ -379,11 +385,17 @@ class EncuestaNutricionalRepository:
         values.append(numero_encuesta)
         with get_db_cursor() as cur:
             cur.execute(
+                "SELECT 1 FROM encuestas_nutricionales WHERE numero_encuesta = %s AND is_active = 1",
+                (numero_encuesta,),
+            )
+            if not cur.fetchone():
+                return False
+            cur.execute(
                 f"UPDATE encuestas_nutricionales SET {', '.join(fields)} "
                 f"WHERE numero_encuesta = %s AND is_active = 1",
                 values,
             )
-            return cur.rowcount > 0
+            return True
 
     def soft_delete(self, numero_encuesta: str) -> bool:
         with get_db_cursor() as cur:
@@ -493,7 +505,6 @@ class EncuestaNutricionalRepository:
 
     def update_miembro(self, encuesta_id: int, miembro_id: int, data: MiembroUpdate) -> bool:
         update_data = data.model_dump(exclude_none=True)
-        changed = False
 
         # nombre_participante → personas_nutricionales.nombre; resto 1:1
         PERSONA_MAP = {
@@ -505,6 +516,19 @@ class EncuestaNutricionalRepository:
         }
         persona_cols = {col: update_data[field]
                         for field, col in PERSONA_MAP.items() if field in update_data}
+        miembro_cols = {f: update_data[f] for f in _MIEMBRO_UPDATABLE if f in update_data}
+
+        if not persona_cols and not miembro_cols:
+            return False
+
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT 1 FROM encuesta_nutricional_miembros "
+                "WHERE id = %s AND encuesta_id = %s AND is_active = 1",
+                (miembro_id, encuesta_id),
+            )
+            if not cur.fetchone():
+                return False
 
         if persona_cols:
             pf = [f"p.{col} = %s" for col in persona_cols]
@@ -517,9 +541,6 @@ class EncuestaNutricionalRepository:
                     f"WHERE m.id = %s AND m.encuesta_id = %s",
                     pv,
                 )
-                changed = changed or cur.rowcount > 0
-
-        miembro_cols = {f: update_data[f] for f in _MIEMBRO_UPDATABLE if f in update_data}
 
         if miembro_cols:
             mf = [f"{f} = %s" for f in miembro_cols]
@@ -530,9 +551,8 @@ class EncuestaNutricionalRepository:
                     f"WHERE id = %s AND encuesta_id = %s AND is_active = 1",
                     mv,
                 )
-                changed = changed or cur.rowcount > 0
 
-        return changed
+        return True
 
     def soft_delete_miembro(self, encuesta_id: int, miembro_id: int) -> bool:
         with get_db_cursor() as cur:
