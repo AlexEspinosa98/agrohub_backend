@@ -1,3 +1,4 @@
+import logging
 import os
 import tempfile
 import io
@@ -8,9 +9,11 @@ from typing import Dict, Optional
 import pandas as pd
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from data_characterization.application.services import EncuestaService
 from data_characterization.domain.entities import (
@@ -63,6 +66,64 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Devuelve los errores de validación en un formato claro, siempre en JSON,
+    indicando el campo exacto, el valor recibido y (si aplica) a qué miembro del
+    hogar corresponde, para que se pueda revisar y corregir el dato puntual."""
+    body = exc.body if isinstance(exc.body, dict) else {}
+    errores = []
+    for err in exc.errors():
+        loc = [p for p in err["loc"] if p != "body"]
+        campo = ".".join(str(p) for p in loc)
+
+        contexto = {}
+        # Si el error viene de un miembro del hogar (ej. loc = ("miembros", 1, "edad_anios")),
+        # agregamos su cédula/nombre para identificarlo sin tener que contar el índice.
+        if len(loc) >= 2 and loc[0] == "miembros" and isinstance(loc[1], int):
+            miembro = (body.get("miembros") or [{}])[loc[1]] if body.get("miembros") else {}
+            if isinstance(miembro, dict):
+                contexto = {
+                    "miembro_index": loc[1],
+                    "miembro_cedula": miembro.get("cedula_participante"),
+                    "miembro_nombre": miembro.get("nombre_participante"),
+                }
+
+        errores.append(
+            {
+                "campo": campo,
+                "mensaje": err["msg"],
+                "tipo_error": err["type"],
+                "valor_recibido": err.get("input"),
+                **contexto,
+            }
+        )
+
+    return JSONResponse(
+        status_code=422,
+        content=jsonable_encoder(
+            {
+                "status": 422,
+                "message": "Datos inválidos en la solicitud",
+                "total_errores": len(errores),
+                "errores": errores,
+            }
+        ),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Red de seguridad: cualquier error no controlado debe responder en JSON, nunca texto plano."""
+    logger.error("Error no controlado en %s: %s", request.url, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"status": 500, "message": "Error interno del servidor. Intente nuevamente."},
+    )
 
 
 @lru_cache(maxsize=1)

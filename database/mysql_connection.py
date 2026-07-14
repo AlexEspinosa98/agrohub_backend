@@ -15,6 +15,7 @@ DATABASE_CONFIG = {
     "database": os.getenv("DB_NAME", "agrohub"),
     "user": os.getenv("DB_USER", "root"),
     "password": os.getenv("DB_PASSWORD", "password"),
+    "connection_timeout": 8,
 }
 
 
