@@ -368,6 +368,24 @@ class EncuestaNutricionalRepository:
             cur.execute(query, params)
             return cur.fetchall()
 
+    def get_resumen_por_municipio(self) -> List[dict]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    e.municipio,
+                    COUNT(DISTINCT e.id) AS total_encuestas,
+                    COUNT(m.id) AS total_miembros
+                FROM encuestas_nutricionales e
+                LEFT JOIN encuesta_nutricional_miembros m
+                    ON m.encuesta_id = e.id AND m.is_active = 1
+                WHERE e.is_active = 1
+                GROUP BY e.municipio
+                ORDER BY total_encuestas DESC
+                """
+            )
+            return cur.fetchall()
+
     def update(self, numero_encuesta: str, data: EncuestaNutricionalUpdate) -> bool:
         fields = []
         values = []

@@ -235,6 +235,12 @@ class EncuestaNutricionalUpdate(BaseModel):
     observaciones_encuestador: Optional[str] = None
 
 
+class ResumenMunicipioItem(BaseModel):
+    municipio: str
+    total_encuestas: int
+    total_miembros: int
+
+
 class EncuestaNutricionalListItem(BaseModel):
     numero_encuesta: str
     nombre_encuestador: str

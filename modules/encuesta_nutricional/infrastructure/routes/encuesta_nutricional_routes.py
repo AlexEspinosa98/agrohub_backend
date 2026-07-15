@@ -13,6 +13,7 @@ from modules.encuesta_nutricional.domain.entities import (
     MiembroUpdate,
     PersonaNutricionalDetail,
     PersonaNutricionalUpdate,
+    ResumenMunicipioItem,
 )
 from modules.encuesta_nutricional.infrastructure.repositories.mysql_repository import (
     EncuestaNutricionalRepository,
@@ -31,6 +32,12 @@ class ListResponse(BaseModel):
     status: int
     message: str
     data: List[EncuestaNutricionalListItem]
+
+
+class ResumenMunicipiosResponse(BaseModel):
+    status: int
+    message: str
+    data: List[ResumenMunicipioItem]
 
 
 def get_repo():
@@ -139,6 +146,26 @@ async def list_encuestas(
     return ListResponse(
         status=status.HTTP_200_OK,
         message="encuestas encontradas",
+        data=items,
+    )
+
+
+@router.get(
+    "/resumen/municipios",
+    response_model=ResumenMunicipiosResponse,
+    summary="Resumen de encuestas por municipio",
+    description=(
+        "Devuelve, por cada municipio, el total de encuestas activas y el total de "
+        "miembros del hogar registrados en ellas. Ordenado de mayor a menor cantidad de encuestas."
+    ),
+)
+async def get_resumen_municipios(
+    repo: EncuestaNutricionalRepository = Depends(get_repo),
+):
+    items = repo.get_resumen_por_municipio()
+    return ResumenMunicipiosResponse(
+        status=status.HTTP_200_OK,
+        message="resumen generado",
         data=items,
     )
 
