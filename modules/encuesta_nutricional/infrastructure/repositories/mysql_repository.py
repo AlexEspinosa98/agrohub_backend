@@ -369,6 +369,7 @@ class EncuestaNutricionalRepository:
             return cur.fetchall()
 
     def get_resumen_por_municipio(self) -> List[dict]:
+        """Agrupa las encuestas activas por municipio y cuenta encuestas y miembros de cada una."""
         with get_db_cursor() as cur:
             cur.execute(
                 """

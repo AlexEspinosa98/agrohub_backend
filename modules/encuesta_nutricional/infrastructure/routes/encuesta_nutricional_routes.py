@@ -162,6 +162,7 @@ async def list_encuestas(
 async def get_resumen_municipios(
     repo: EncuestaNutricionalRepository = Depends(get_repo),
 ):
+    """Reporte de encuestas activas agrupadas por municipio, para tablero/estadísticas."""
     items = repo.get_resumen_por_municipio()
     return ResumenMunicipiosResponse(
         status=status.HTTP_200_OK,
