@@ -241,6 +241,28 @@ class ResumenMunicipioItem(BaseModel):
     total_miembros: int
 
 
+class ResumenVeredaItem(BaseModel):
+    municipio: str
+    vereda_comunidad: str
+    total_encuestas: int
+    total_miembros: int
+
+
+class DetalleMunicipioResponse(BaseModel):
+    municipio: str
+    total_encuestas: int
+    total_miembros: int
+    promedio_edad_anios: Optional[float] = None
+    promedio_peso_kg: Optional[float] = None
+    promedio_talla_cm: Optional[float] = None
+    promedio_circunferencia_cintura_cm: Optional[float] = None
+    promedio_imc: Optional[float] = None
+    promedio_diversidad_dietetica: Optional[float] = None
+    promedio_inseguridad_alimentaria: Optional[float] = None
+    distribucion_seguridad_alimentaria: dict = {}
+    distribucion_sexo: dict = {}
+
+
 class EncuestaNutricionalListItem(BaseModel):
     numero_encuesta: str
     nombre_encuestador: str

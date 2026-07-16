@@ -387,6 +387,109 @@ class EncuestaNutricionalRepository:
             )
             return cur.fetchall()
 
+    def get_resumen_por_vereda(self, municipio: Optional[str] = None) -> List[dict]:
+        """Agrupa las encuestas activas por municipio + vereda/comunidad."""
+        query = """
+            SELECT
+                e.municipio,
+                e.vereda_comunidad,
+                COUNT(DISTINCT e.id) AS total_encuestas,
+                COUNT(m.id) AS total_miembros
+            FROM encuestas_nutricionales e
+            LEFT JOIN encuesta_nutricional_miembros m
+                ON m.encuesta_id = e.id AND m.is_active = 1
+            WHERE e.is_active = 1
+        """
+        params: List = []
+        if municipio:
+            query += " AND e.municipio = %s"
+            params.append(municipio)
+        query += " GROUP BY e.municipio, e.vereda_comunidad ORDER BY e.municipio, total_encuestas DESC"
+        with get_db_cursor() as cur:
+            cur.execute(query, params)
+            return cur.fetchall()
+
+    def get_detalle_municipio(self, municipio: str) -> Optional[dict]:
+        """Estadísticas detalladas de un municipio: promedios antropométricos, puntajes
+        de seguridad alimentaria y distribuciones por clasificación y sexo."""
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) AS total_encuestas,
+                    AVG(puntaje_diversidad_dietetica) AS promedio_diversidad_dietetica,
+                    AVG(puntaje_inseguridad_alimentaria) AS promedio_inseguridad_alimentaria
+                FROM encuestas_nutricionales
+                WHERE municipio = %s AND is_active = 1
+                """,
+                (municipio,),
+            )
+            hogar = cur.fetchone()
+            if not hogar or not hogar["total_encuestas"]:
+                return None
+
+            cur.execute(
+                """
+                SELECT clasificacion_seguridad_alimentaria AS clasificacion, COUNT(*) AS total
+                FROM encuestas_nutricionales
+                WHERE municipio = %s AND is_active = 1
+                    AND clasificacion_seguridad_alimentaria IS NOT NULL
+                GROUP BY clasificacion_seguridad_alimentaria
+                """,
+                (municipio,),
+            )
+            distribucion_seguridad = {row["clasificacion"]: row["total"] for row in cur.fetchall()}
+
+            cur.execute(
+                """
+                SELECT
+                    COUNT(m.id) AS total_miembros,
+                    AVG(p.edad_anios) AS promedio_edad_anios,
+                    AVG(m.peso_kg) AS promedio_peso_kg,
+                    AVG(m.talla_cm) AS promedio_talla_cm,
+                    AVG(m.circunferencia_cintura_cm) AS promedio_circunferencia_cintura_cm,
+                    AVG(m.imc_calculado) AS promedio_imc
+                FROM encuesta_nutricional_miembros m
+                JOIN encuestas_nutricionales e ON e.id = m.encuesta_id
+                JOIN personas_nutricionales p ON p.id = m.persona_id
+                WHERE e.municipio = %s AND e.is_active = 1 AND m.is_active = 1
+                """,
+                (municipio,),
+            )
+            miembros = cur.fetchone()
+
+            cur.execute(
+                """
+                SELECT p.sexo AS sexo, COUNT(*) AS total
+                FROM encuesta_nutricional_miembros m
+                JOIN encuestas_nutricionales e ON e.id = m.encuesta_id
+                JOIN personas_nutricionales p ON p.id = m.persona_id
+                WHERE e.municipio = %s AND e.is_active = 1 AND m.is_active = 1
+                    AND p.sexo IS NOT NULL
+                GROUP BY p.sexo
+                """,
+                (municipio,),
+            )
+            distribucion_sexo = {row["sexo"]: row["total"] for row in cur.fetchall()}
+
+        def _round(value):
+            return round(float(value), 2) if value is not None else None
+
+        return {
+            "municipio": municipio,
+            "total_encuestas": hogar["total_encuestas"],
+            "total_miembros": miembros["total_miembros"] or 0,
+            "promedio_edad_anios": _round(miembros["promedio_edad_anios"]),
+            "promedio_peso_kg": _round(miembros["promedio_peso_kg"]),
+            "promedio_talla_cm": _round(miembros["promedio_talla_cm"]),
+            "promedio_circunferencia_cintura_cm": _round(miembros["promedio_circunferencia_cintura_cm"]),
+            "promedio_imc": _round(miembros["promedio_imc"]),
+            "promedio_diversidad_dietetica": _round(hogar["promedio_diversidad_dietetica"]),
+            "promedio_inseguridad_alimentaria": _round(hogar["promedio_inseguridad_alimentaria"]),
+            "distribucion_seguridad_alimentaria": distribucion_seguridad,
+            "distribucion_sexo": distribucion_sexo,
+        }
+
     def update(self, numero_encuesta: str, data: EncuestaNutricionalUpdate) -> bool:
         fields = []
         values = []

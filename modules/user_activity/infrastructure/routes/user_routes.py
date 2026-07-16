@@ -6,10 +6,11 @@ from datetime import date
 from typing import Optional, Any, List
 
 import requests as http_requests
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Security, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
-from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+
+from modules.user_activity.infrastructure.auth import ensure_admin, get_current_user
 
 from modules.user_activity.domain.entities import (
     Association,
@@ -112,11 +113,6 @@ def _call_gemini(api_key: str, system_prompt: str, history: list, user_message: 
 
 router = APIRouter(prefix="/user-activity", tags=["User Activity"])
 
-auth_scheme = APIKeyHeader(
-    name="Authorization",
-    description="Usa el formato: `Token <tu_token>`",
-    auto_error=False,
-)
 
 def get_repo():
     return UserActivityRepository()
@@ -151,24 +147,6 @@ def _sanitize_logbook(entry: dict) -> dict:
     return entry
 
 
-def get_current_user(
-    authorization: str = Security(auth_scheme),
-    repo: UserActivityRepository = Depends(get_repo),
-):
-    if not authorization or not authorization.lower().startswith("token "):
-        raise HTTPException(status_code=401, detail="Falta header Authorization: Token <token>")
-    token = authorization.split(" ", 1)[1]
-    user = repo.get_user_by_token(token)
-    if not user:
-        raise HTTPException(status_code=401, detail="Token inválido")
-    return user
-
-
-def _ensure_admin(user: dict):
-    if user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="Requiere rol admin")
-
-
 @router.post(
     "/associations",
     status_code=status.HTTP_201_CREATED,
@@ -181,7 +159,7 @@ async def create_association(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    _ensure_admin(current_user)
+    ensure_admin(current_user)
     repo.create_association(association)
     return StandardResponse(status=status.HTTP_201_CREATED, message="asociación creada")
 
@@ -222,7 +200,7 @@ async def update_association(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    _ensure_admin(current_user)
+    ensure_admin(current_user)
     if not repo.get_association(association_id):
         raise HTTPException(status_code=404, detail="Asociación no encontrada")
     updated = repo.update_association(association_id, payload)
@@ -275,7 +253,7 @@ async def admin_create_user(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    _ensure_admin(current_user)
+    ensure_admin(current_user)
     if payload.association_id and not repo.get_association(payload.association_id):
         raise HTTPException(status_code=404, detail="Asociación no encontrada")
     try:
@@ -297,7 +275,7 @@ async def admin_update_user(
     repo: UserActivityRepository = Depends(get_repo),
     current_user=Depends(get_current_user),
 ):
-    _ensure_admin(current_user)
+    ensure_admin(current_user)
     if payload.association_id and not repo.get_association(payload.association_id):
         raise HTTPException(status_code=404, detail="Asociación no encontrada")
     if not repo.get_user_by_id(user_id):

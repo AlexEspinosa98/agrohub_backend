@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from modules.encuesta_nutricional.domain.entities import (
+    DetalleMunicipioResponse,
     EncuestaNutricionalCreate,
     EncuestaNutricionalDetail,
     EncuestaNutricionalListItem,
@@ -14,10 +15,12 @@ from modules.encuesta_nutricional.domain.entities import (
     PersonaNutricionalDetail,
     PersonaNutricionalUpdate,
     ResumenMunicipioItem,
+    ResumenVeredaItem,
 )
 from modules.encuesta_nutricional.infrastructure.repositories.mysql_repository import (
     EncuestaNutricionalRepository,
 )
+from modules.user_activity.infrastructure.auth import get_current_user
 
 router = APIRouter(prefix="/encuesta-nutricional", tags=["Encuesta Nutricional SAN"])
 
@@ -38,6 +41,18 @@ class ResumenMunicipiosResponse(BaseModel):
     status: int
     message: str
     data: List[ResumenMunicipioItem]
+
+
+class ResumenVeredasResponse(BaseModel):
+    status: int
+    message: str
+    data: List[ResumenVeredaItem]
+
+
+class DetalleMunicipioStandardResponse(BaseModel):
+    status: int
+    message: str
+    data: DetalleMunicipioResponse
 
 
 def get_repo():
@@ -150,24 +165,81 @@ async def list_encuestas(
     )
 
 
+# ---------------------------------------------------------------------------
+# Dashboard / estadísticas — requieren token (Authorization: Token <token>).
+# El resto de endpoints de encuesta-nutricional (registro y consulta individual
+# desde el formulario de campo) se mantienen sin autenticación a propósito.
+# ---------------------------------------------------------------------------
+
 @router.get(
-    "/resumen/municipios",
+    "/dashboard/municipios",
     response_model=ResumenMunicipiosResponse,
-    summary="Resumen de encuestas por municipio",
+    summary="[Dashboard] Resumen de encuestas por municipio",
     description=(
+        "Requiere token (`Authorization: Token <token>`, login en /user-activity/users/login). "
         "Devuelve, por cada municipio, el total de encuestas activas y el total de "
         "miembros del hogar registrados en ellas. Ordenado de mayor a menor cantidad de encuestas."
     ),
 )
-async def get_resumen_municipios(
+async def get_dashboard_municipios(
+    current_user: dict = Depends(get_current_user),
     repo: EncuestaNutricionalRepository = Depends(get_repo),
 ):
-    """Reporte de encuestas activas agrupadas por municipio, para tablero/estadísticas."""
     items = repo.get_resumen_por_municipio()
     return ResumenMunicipiosResponse(
         status=status.HTTP_200_OK,
         message="resumen generado",
         data=items,
+    )
+
+
+@router.get(
+    "/dashboard/veredas",
+    response_model=ResumenVeredasResponse,
+    summary="[Dashboard] Resumen de encuestas por vereda/comunidad",
+    description=(
+        "Requiere token (`Authorization: Token <token>`). "
+        "Devuelve, por cada combinación municipio + vereda_comunidad, el total de encuestas "
+        "activas y el total de miembros del hogar. Filtro opcional por municipio."
+    ),
+)
+async def get_dashboard_veredas(
+    municipio: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+    repo: EncuestaNutricionalRepository = Depends(get_repo),
+):
+    items = repo.get_resumen_por_vereda(municipio=municipio)
+    return ResumenVeredasResponse(
+        status=status.HTTP_200_OK,
+        message="resumen generado",
+        data=items,
+    )
+
+
+@router.get(
+    "/dashboard/municipios/{municipio}",
+    response_model=DetalleMunicipioStandardResponse,
+    summary="[Dashboard] Detalle estadístico de un municipio",
+    description=(
+        "Requiere token (`Authorization: Token <token>`). "
+        "Devuelve, para un municipio puntual: total de encuestas y miembros, promedios "
+        "antropométricos (edad, peso, talla, circunferencia de cintura, IMC), promedio de "
+        "diversidad dietética y de inseguridad alimentaria (ELCSA), y distribuciones por "
+        "clasificación de seguridad alimentaria y por sexo."
+    ),
+)
+async def get_dashboard_detalle_municipio(
+    municipio: str,
+    current_user: dict = Depends(get_current_user),
+    repo: EncuestaNutricionalRepository = Depends(get_repo),
+):
+    detalle = repo.get_detalle_municipio(municipio)
+    if not detalle:
+        raise HTTPException(status_code=404, detail="No hay encuestas activas para ese municipio")
+    return DetalleMunicipioStandardResponse(
+        status=status.HTTP_200_OK,
+        message="detalle generado",
+        data=DetalleMunicipioResponse(**detalle),
     )
 
 
