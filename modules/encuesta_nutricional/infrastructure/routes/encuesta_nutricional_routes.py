@@ -176,13 +176,11 @@ async def list_encuestas(
     response_model=ResumenMunicipiosResponse,
     summary="[Dashboard] Resumen de encuestas por municipio",
     description=(
-        "Requiere token (`Authorization: Token <token>`, login en /user-activity/users/login). "
         "Devuelve, por cada municipio, el total de encuestas activas y el total de "
         "miembros del hogar registrados en ellas. Ordenado de mayor a menor cantidad de encuestas."
     ),
 )
 async def get_dashboard_municipios(
-    current_user: dict = Depends(get_current_user),
     repo: EncuestaNutricionalRepository = Depends(get_repo),
 ):
     items = repo.get_resumen_por_municipio()
