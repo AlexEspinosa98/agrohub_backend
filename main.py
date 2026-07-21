@@ -49,7 +49,7 @@ app = FastAPI(
         "**Módulos disponibles:**\n"
         "- **Data Characterization**: encuestas AgroHub, educativa y de derecho humano alimentario.\n"
         "- **Hub CGSM**: actores, faenas, puntos de acopio y monitoreos ambientales.\n"
-        "- **User Activity**: registro, login (rol `user` por defecto) y bitácoras con token.\n"
+        "- **User Activity**: registro (sin rol hasta asignación por superadmin), login, gestión de roles y bitácoras con token.\n"
         "- **Encuesta Nutricional SAN**: encuestas de seguridad alimentaria y nutricional por hogar. "
         "Cada encuesta registra datos del hogar (secciones A, C y D/ELCSA) y los datos individuales "
         "de cada miembro (sección B — mediciones antropométricas) vinculados a una tabla maestra de "

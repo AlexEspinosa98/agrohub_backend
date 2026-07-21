@@ -46,7 +46,7 @@ class User(BaseModel):
     email: Optional[str] = None
     password: str
     association_id: Optional[int] = None
-    role: str = Field(default="user", description="Rol del usuario (user/admin)")
+    role: Optional[str] = Field(default=None, description="Rol del usuario; nulo hasta que un superadmin lo asigne")
     created_at: Optional[datetime] = None
 
 
@@ -94,12 +94,42 @@ class UserPublic(BaseModel):
     identification: str
     email: Optional[str] = None
     association_id: Optional[int] = None
-    role: str
+    role: Optional[str] = None
     created_at: Optional[datetime] = None
 
 class UserLogin(BaseModel):
     phone_or_identification: str
     password: str
+
+
+class SuperadminCreate(BaseModel):
+    name: str
+    phone: str
+    identification: str
+    email: Optional[str] = None
+    password: str
+    association_id: Optional[int] = Field(None, description="Asociación a la que se vincula el superadmin")
+
+
+class Role(BaseModel):
+    id: Optional[int] = None
+    name: str
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class RoleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class RoleUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RoleAssign(BaseModel):
+    role: str = Field(..., description="Nombre del rol a asignar; debe existir en la tabla de roles")
 
 class Logbook(BaseModel):
     id: Optional[int] = None

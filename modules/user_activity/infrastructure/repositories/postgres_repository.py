@@ -9,11 +9,11 @@ from modules.user_activity.domain.entities import (
     AssociationUpdate,
     Logbook,
     LogbookUpdate,
+    RoleCreate,
+    RoleUpdate,
     User,
     UserUpdate,
 )
-
-DEFAULT_ROLE = "user"
 
 
 class UserActivityRepository:
@@ -38,6 +38,24 @@ class UserActivityRepository:
             )
             cur.execute(
                 """
+                CREATE TABLE IF NOT EXISTS roles (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(50) NOT NULL UNIQUE,
+                    description VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB;
+                """
+            )
+            cur.execute(
+                """
+                INSERT IGNORE INTO roles (name, description) VALUES
+                    ('user', 'Usuario estándar'),
+                    ('admin', 'Administrador'),
+                    ('superadmin', 'Super administrador');
+                """
+            )
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS users (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     name VARCHAR(255) NOT NULL,
@@ -46,13 +64,16 @@ class UserActivityRepository:
                     email VARCHAR(255),
                     password_hash VARCHAR(255) NOT NULL,
                     association_id INT,
-                    role VARCHAR(50) NOT NULL DEFAULT 'user',
+                    role VARCHAR(50) DEFAULT NULL,
                     auth_token VARCHAR(255) UNIQUE,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     CONSTRAINT fk_users_association FOREIGN KEY (association_id) REFERENCES associations(id)
                 ) ENGINE=InnoDB;
                 """
             )
+            # Migración: instalaciones existentes tenían `role` como NOT NULL DEFAULT 'user'.
+            # Un usuario nuevo ahora nace sin rol hasta que un superadmin se lo asigna.
+            cur.execute("ALTER TABLE users MODIFY role VARCHAR(50) DEFAULT NULL;")
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS logbooks (
@@ -86,7 +107,6 @@ class UserActivityRepository:
     # Users
     def create_user(self, user: User) -> int:
         password_hash = hashlib.sha256(user.password.encode("utf-8")).hexdigest()
-        role_value = user.role if getattr(user, "role", None) else DEFAULT_ROLE
         with get_db_cursor() as cur:
             cur.execute(
                 """
@@ -100,7 +120,7 @@ class UserActivityRepository:
                     user.email,
                     password_hash,
                     user.association_id,
-                    role_value,
+                    user.role,
                 ),
             )
             return cur.lastrowid
@@ -109,6 +129,21 @@ class UserActivityRepository:
         with get_db_cursor() as cur:
             cur.execute("SELECT * FROM users WHERE id = %s", (user_id,))
             return cur.fetchone()
+
+    def list_users(self) -> List[dict]:
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, phone, identification, email, association_id, role, created_at
+                FROM users ORDER BY created_at DESC;
+                """
+            )
+            return cur.fetchall()
+
+    def assign_role(self, user_id: int, role_name: str) -> bool:
+        with get_db_cursor() as cur:
+            cur.execute("UPDATE users SET role = %s WHERE id = %s", (role_name, user_id))
+            return cur.rowcount > 0
 
     def get_user_by_phone_or_identification(self, value: str) -> Optional[dict]:
         with get_db_cursor() as cur:
@@ -207,6 +242,49 @@ class UserActivityRepository:
                 "SELECT id, name, municipality FROM associations ORDER BY name ASC;"
             )
             return cur.fetchall()
+
+    # Roles
+    def create_role(self, role: RoleCreate) -> int:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "INSERT INTO roles (name, description) VALUES (%s, %s);",
+                (role.name, role.description),
+            )
+            return cur.lastrowid
+
+    def list_roles(self) -> List[dict]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM roles ORDER BY name ASC;")
+            return cur.fetchall()
+
+    def get_role_by_id(self, role_id: int) -> Optional[dict]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM roles WHERE id = %s", (role_id,))
+            return cur.fetchone()
+
+    def get_role_by_name(self, name: str) -> Optional[dict]:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT * FROM roles WHERE name = %s", (name,))
+            return cur.fetchone()
+
+    def update_role(self, role_id: int, data: RoleUpdate) -> bool:
+        fields = []
+        values = []
+        if data.name is not None:
+            fields.append("name = %s")
+            values.append(data.name)
+        if data.description is not None:
+            fields.append("description = %s")
+            values.append(data.description)
+        if not fields:
+            return False
+        values.append(role_id)
+        with get_db_cursor() as cur:
+            cur.execute(
+                f"UPDATE roles SET {', '.join(fields)} WHERE id = %s",
+                values,
+            )
+            return cur.rowcount > 0
 
     # Logbooks
     def create_logbook(self, logbook: Logbook) -> int:

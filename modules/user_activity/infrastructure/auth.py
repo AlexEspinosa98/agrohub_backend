@@ -1,3 +1,6 @@
+import os
+from typing import Optional
+
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import APIKeyHeader
 
@@ -30,5 +33,16 @@ def get_current_user(
 
 
 def ensure_admin(user: dict):
-    if user.get("role") != "admin":
+    if user.get("role") not in ("admin", "superadmin"):
         raise HTTPException(status_code=403, detail="Requiere rol admin")
+
+
+def ensure_superadmin(user: dict):
+    if user.get("role") != "superadmin":
+        raise HTTPException(status_code=403, detail="Requiere rol superadmin")
+
+
+def ensure_superadmin_token(token: Optional[str]):
+    expected = os.getenv("SUPERADMIN_TOKEN")
+    if not expected or not token or token != expected:
+        raise HTTPException(status_code=403, detail="Token de superadmin inválido")

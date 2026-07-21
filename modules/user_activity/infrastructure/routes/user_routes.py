@@ -6,11 +6,16 @@ from datetime import date
 from typing import Optional, Any, List
 
 import requests as http_requests
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 
-from modules.user_activity.infrastructure.auth import ensure_admin, get_current_user
+from modules.user_activity.infrastructure.auth import (
+    ensure_admin,
+    ensure_superadmin,
+    ensure_superadmin_token,
+    get_current_user,
+)
 
 from modules.user_activity.domain.entities import (
     Association,
@@ -22,6 +27,11 @@ from modules.user_activity.domain.entities import (
     Logbook,
     LogbookCreate,
     LogbookUpdate,
+    Role,
+    RoleAssign,
+    RoleCreate,
+    RoleUpdate,
+    SuperadminCreate,
     User,
     UserLogin,
     UserPublic,
@@ -137,6 +147,18 @@ class AssociationsResponse(BaseModel):
     data: List[AssociationListItem]
 
 
+class UsersResponse(BaseModel):
+    status: int
+    message: str
+    data: List[UserPublic]
+
+
+class RolesResponse(BaseModel):
+    status: int
+    message: str
+    data: List[Role]
+
+
 def _sanitize_logbook(entry: dict) -> dict:
     """Remove user_id from logbook payloads before returning to clients."""
     if not entry:
@@ -214,18 +236,138 @@ async def update_association(
     status_code=status.HTTP_201_CREATED,
     response_model=StandardResponse,
     summary="Registrar usuario (público)",
-    description="Crea un usuario con rol por defecto **user**. Requiere `association_id` para vincularlo a una asociación.",
+    description="Crea un usuario sin rol asignado. Un superadmin deberá asignarle un rol luego. Requiere `association_id` para vincularlo a una asociación.",
 )
 async def register_user(user: UserRegister, repo: UserActivityRepository = Depends(get_repo)):
     try:
         if not repo.get_association(user.association_id):
             raise HTTPException(status_code=404, detail="Asociación no encontrada")
         user_data = user.dict()
-        user_data["role"] = "user"
+        user_data["role"] = None
         repo.create_user(User(**user_data))
         return StandardResponse(status=status.HTTP_201_CREATED, message="usuario creado", data=None)
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=400, detail="Teléfono o identificación ya registrados") from exc
+
+
+@router.post(
+    "/users/superadmin",
+    status_code=status.HTTP_201_CREATED,
+    response_model=StandardResponse,
+    summary="Crear superadmin",
+    description=(
+        "Crea un usuario con rol **superadmin**. Requiere el header `X-Superadmin-Token` "
+        "con el valor configurado en la variable de entorno `SUPERADMIN_TOKEN`."
+    ),
+)
+async def create_superadmin(
+    payload: SuperadminCreate,
+    x_superadmin_token: Optional[str] = Header(None, alias="X-Superadmin-Token"),
+    repo: UserActivityRepository = Depends(get_repo),
+):
+    ensure_superadmin_token(x_superadmin_token)
+    if payload.association_id and not repo.get_association(payload.association_id):
+        raise HTTPException(status_code=404, detail="Asociación no encontrada")
+    try:
+        user_data = payload.dict()
+        user_data["role"] = "superadmin"
+        repo.create_user(User(**user_data))
+        return StandardResponse(status=status.HTTP_201_CREATED, message="superadmin creado", data=None)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail="Teléfono o identificación ya registrados") from exc
+
+
+@router.get(
+    "/users",
+    response_model=UsersResponse,
+    summary="Listar usuarios",
+    description="Lista todos los usuarios registrados (solo superadmin).",
+)
+async def list_users(
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    ensure_superadmin(current_user)
+    return UsersResponse(status=status.HTTP_200_OK, message="usuarios", data=repo.list_users())
+
+
+@router.put(
+    "/users/{user_id}/role",
+    response_model=StandardResponse,
+    summary="Asignar rol a usuario",
+    description="Asigna a un usuario un rol existente en la tabla de roles (solo superadmin).",
+)
+async def assign_user_role(
+    user_id: int,
+    payload: RoleAssign,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    ensure_superadmin(current_user)
+    if not repo.get_user_by_id(user_id):
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    if not repo.get_role_by_name(payload.role):
+        raise HTTPException(status_code=404, detail="El rol especificado no existe")
+    repo.assign_role(user_id, payload.role)
+    return StandardResponse(status=status.HTTP_200_OK, message="rol asignado", data=None)
+
+
+@router.get(
+    "/roles",
+    response_model=RolesResponse,
+    summary="Listar roles",
+    description="Lista todos los roles disponibles (solo superadmin).",
+)
+async def list_roles(
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    ensure_superadmin(current_user)
+    return RolesResponse(status=status.HTTP_200_OK, message="roles", data=repo.list_roles())
+
+
+@router.post(
+    "/roles",
+    status_code=status.HTTP_201_CREATED,
+    response_model=StandardResponse,
+    summary="Crear rol",
+    description="Crea un nuevo rol (solo superadmin).",
+)
+async def create_role(
+    payload: RoleCreate,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    ensure_superadmin(current_user)
+    if repo.get_role_by_name(payload.name):
+        raise HTTPException(status_code=400, detail="Ya existe un rol con ese nombre")
+    repo.create_role(payload)
+    return StandardResponse(status=status.HTTP_201_CREATED, message="rol creado", data=None)
+
+
+@router.put(
+    "/roles/{role_id}",
+    response_model=StandardResponse,
+    summary="Editar rol",
+    description="Actualiza nombre y/o descripción de un rol existente (solo superadmin).",
+)
+async def update_role(
+    role_id: int,
+    payload: RoleUpdate,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    ensure_superadmin(current_user)
+    if not repo.get_role_by_id(role_id):
+        raise HTTPException(status_code=404, detail="Rol no encontrado")
+    if payload.name:
+        existing = repo.get_role_by_name(payload.name)
+        if existing and existing["id"] != role_id:
+            raise HTTPException(status_code=400, detail="Ya existe un rol con ese nombre")
+    updated = repo.update_role(role_id, payload)
+    if not updated:
+        raise HTTPException(status_code=400, detail="Nada para actualizar")
+    return StandardResponse(status=status.HTTP_200_OK, message="rol actualizado", data=None)
 
 
 @router.get(
