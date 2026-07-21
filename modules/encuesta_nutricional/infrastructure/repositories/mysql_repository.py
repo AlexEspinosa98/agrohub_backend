@@ -42,6 +42,8 @@ _PERSONA_UPDATABLE = [
     "nombre", "edad_anios", "sexo", "area_residencia", "nivel_educativo",
 ]
 
+_RANGOS_EDAD = ["0-5", "6-12", "13-17", "18-29", "30-44", "45-59", "60+"]
+
 
 def _deserialize_encuesta(row: dict) -> dict:
     if not row:
@@ -472,6 +474,33 @@ class EncuestaNutricionalRepository:
             )
             distribucion_sexo = {row["sexo"]: row["total"] for row in cur.fetchall()}
 
+            cur.execute(
+                """
+                SELECT
+                    CASE
+                        WHEN p.edad_anios <= 5 THEN '0-5'
+                        WHEN p.edad_anios <= 12 THEN '6-12'
+                        WHEN p.edad_anios <= 17 THEN '13-17'
+                        WHEN p.edad_anios <= 29 THEN '18-29'
+                        WHEN p.edad_anios <= 44 THEN '30-44'
+                        WHEN p.edad_anios <= 59 THEN '45-59'
+                        ELSE '60+'
+                    END AS rango,
+                    COUNT(*) AS total
+                FROM encuesta_nutricional_miembros m
+                JOIN encuestas_nutricionales e ON e.id = m.encuesta_id
+                JOIN personas_nutricionales p ON p.id = m.persona_id
+                WHERE e.municipio = %s AND e.is_active = 1 AND m.is_active = 1
+                    AND p.edad_anios IS NOT NULL
+                GROUP BY rango
+                """,
+                (municipio,),
+            )
+            conteo_por_rango = {row["rango"]: row["total"] for row in cur.fetchall()}
+            distribucion_edad = {
+                rango: conteo_por_rango.get(rango, 0) for rango in _RANGOS_EDAD
+            }
+
         def _round(value):
             return round(float(value), 2) if value is not None else None
 
@@ -488,6 +517,7 @@ class EncuestaNutricionalRepository:
             "promedio_inseguridad_alimentaria": _round(hogar["promedio_inseguridad_alimentaria"]),
             "distribucion_seguridad_alimentaria": distribucion_seguridad,
             "distribucion_sexo": distribucion_sexo,
+            "distribucion_edad": distribucion_edad,
         }
 
     def update(self, numero_encuesta: str, data: EncuestaNutricionalUpdate) -> bool:

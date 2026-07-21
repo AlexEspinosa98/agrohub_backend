@@ -222,8 +222,9 @@ async def get_dashboard_veredas(
         "Requiere token (`Authorization: Token <token>`). "
         "Devuelve, para un municipio puntual: total de encuestas y miembros, promedios "
         "antropométricos (edad, peso, talla, circunferencia de cintura, IMC), promedio de "
-        "diversidad dietética y de inseguridad alimentaria (ELCSA), y distribuciones por "
-        "clasificación de seguridad alimentaria y por sexo."
+        "diversidad dietética y de inseguridad alimentaria (ELCSA), y distribuciones (listas para "
+        "graficar en el front) por clasificación de seguridad alimentaria, por sexo y por rango "
+        "de edad (0-5, 6-12, 13-17, 18-29, 30-44, 45-59, 60+)."
     ),
 )
 async def get_dashboard_detalle_municipio(

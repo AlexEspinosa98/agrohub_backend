@@ -261,6 +261,7 @@ class DetalleMunicipioResponse(BaseModel):
     promedio_inseguridad_alimentaria: Optional[float] = None
     distribucion_seguridad_alimentaria: dict = {}
     distribucion_sexo: dict = {}
+    distribucion_edad: dict = {}
 
 
 class EncuestaNutricionalListItem(BaseModel):
