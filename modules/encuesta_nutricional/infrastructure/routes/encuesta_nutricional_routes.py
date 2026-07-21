@@ -1,6 +1,9 @@
+import io
 from typing import Any, List, Optional
 
+import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from modules.encuesta_nutricional.domain.entities import (
@@ -239,6 +242,45 @@ async def get_dashboard_detalle_municipio(
         status=status.HTTP_200_OK,
         message="detalle generado",
         data=DetalleMunicipioResponse(**detalle),
+    )
+
+
+@router.get(
+    "/export/excel",
+    summary="[Dashboard] Exportar encuestas a Excel (una hoja por municipio)",
+    description=(
+        "Requiere token (`Authorization: Token <token>`). "
+        "Genera un archivo `.xlsx` con una hoja por municipio. Cada fila es un miembro del "
+        "hogar, con todos los campos de la encuesta (secciones A, C y D/ELCSA) y sus datos "
+        "antropométricos (sección B)."
+    ),
+)
+async def export_encuestas_excel(
+    current_user: dict = Depends(get_current_user),
+    repo: EncuestaNutricionalRepository = Depends(get_repo),
+):
+    rows = repo.get_datos_completos_para_export()
+    if not rows:
+        raise HTTPException(status_code=404, detail="No hay encuestas activas para exportar")
+
+    for row in rows:
+        if isinstance(row.get("alimentos_preferidos"), list):
+            row["alimentos_preferidos"] = "; ".join(row["alimentos_preferidos"])
+
+    df = pd.DataFrame(rows)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        for municipio, group in df.groupby("municipio"):
+            group.to_excel(writer, index=False, sheet_name=str(municipio)[:31])
+        if writer.sheets:
+            writer.book.active = 0
+    output.seek(0)
+
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=encuestas_nutricionales.xlsx"},
     )
 
 

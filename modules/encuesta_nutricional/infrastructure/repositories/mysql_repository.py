@@ -411,6 +411,45 @@ class EncuestaNutricionalRepository:
             cur.execute(query, params)
             return cur.fetchall()
 
+    def get_datos_completos_para_export(self) -> List[dict]:
+        """Un registro por miembro del hogar, con todos los campos de la encuesta
+        (secciones A/C/D) y del miembro (sección B + datos de persona). Base para el
+        export a Excel (una hoja por municipio)."""
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    e.numero_encuesta, e.nombre_encuestador, e.cedula_encuestador, e.fecha_aplicacion,
+                    e.codigo_cuestionario, e.municipio, e.vereda_comunidad,
+                    e.num_personas_hogar, e.num_mujeres_hogar, e.hay_menores_18, e.num_ninos_menores_5,
+                    e.fuente_ingreso_principal, e.tiene_huerta_o_animales, e.jefatura_hogar,
+                    e.estabilidad_ingreso,
+                    e.dias_cereales_tuberculos, e.dias_leguminosas, e.dias_carnes_pescado_huevo,
+                    e.dias_lacteos, e.dias_frutas, e.dias_verduras, e.dias_grasas,
+                    e.dias_azucares_ultraprocesados, e.puntaje_diversidad_dietetica,
+                    e.frecuencia_frutas_semana, e.frecuencia_verduras_semana,
+                    e.frecuencia_bebidas_azucaradas, e.comidas_por_dia, e.frecuencia_comida_fuera_hogar,
+                    e.proporcion_autoconsumo, e.alimentos_preferidos,
+                    e.preocupacion_alimentos_acabaran, e.alimentos_se_acabaron,
+                    e.adulto_omitio_comida_principal, e.sintio_hambre_sin_comer,
+                    e.puntaje_inseguridad_alimentaria, e.clasificacion_seguridad_alimentaria,
+                    e.consentimiento_informado, e.observaciones_encuestador,
+                    p.cedula AS cedula_participante, p.nombre AS nombre_participante,
+                    p.edad_anios, p.sexo, p.area_residencia, p.nivel_educativo,
+                    m.percepcion_estado_nutricional, m.cambio_peso_no_intencional,
+                    m.nino_en_control_crecimiento, m.peso_kg, m.talla_cm,
+                    m.circunferencia_cintura_cm, m.perimetro_brazo_cm,
+                    m.grupo_perimetro_brazo, m.imc_calculado
+                FROM encuestas_nutricionales e
+                LEFT JOIN encuesta_nutricional_miembros m
+                    ON m.encuesta_id = e.id AND m.is_active = 1
+                LEFT JOIN personas_nutricionales p ON p.id = m.persona_id
+                WHERE e.is_active = 1
+                ORDER BY e.municipio, e.numero_encuesta
+                """
+            )
+            return [_deserialize_encuesta(row) for row in cur.fetchall()]
+
     def get_detalle_municipio(self, municipio: str) -> Optional[dict]:
         """Estadísticas detalladas de un municipio: promedios antropométricos, puntajes
         de seguridad alimentaria y distribuciones por clasificación y sexo."""
