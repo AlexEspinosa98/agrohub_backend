@@ -286,6 +286,16 @@ class UserActivityRepository:
             )
             return cur.rowcount > 0
 
+    def count_users_with_role(self, role_name: str) -> int:
+        with get_db_cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS total FROM users WHERE role = %s", (role_name,))
+            return cur.fetchone()["total"]
+
+    def delete_role(self, role_id: int) -> bool:
+        with get_db_cursor() as cur:
+            cur.execute("DELETE FROM roles WHERE id = %s", (role_id,))
+            return cur.rowcount > 0
+
     # Logbooks
     def create_logbook(self, logbook: Logbook) -> int:
         with get_db_cursor() as cur:

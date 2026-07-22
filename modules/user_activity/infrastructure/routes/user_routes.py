@@ -370,6 +370,30 @@ async def update_role(
     return StandardResponse(status=status.HTTP_200_OK, message="rol actualizado", data=None)
 
 
+@router.delete(
+    "/roles/{role_id}",
+    response_model=StandardResponse,
+    summary="Eliminar rol",
+    description="Elimina un rol (solo superadmin). No se puede eliminar si hay usuarios con ese rol asignado.",
+)
+async def delete_role(
+    role_id: int,
+    repo: UserActivityRepository = Depends(get_repo),
+    current_user=Depends(get_current_user),
+):
+    ensure_superadmin(current_user)
+    role = repo.get_role_by_id(role_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Rol no encontrado")
+    if repo.count_users_with_role(role["name"]) > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No se puede eliminar: hay usuarios con este rol asignado",
+        )
+    repo.delete_role(role_id)
+    return StandardResponse(status=status.HTTP_200_OK, message="rol eliminado", data=None)
+
+
 @router.get(
     "/users/{user_id}",
     response_model=StandardResponse,
