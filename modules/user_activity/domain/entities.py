@@ -56,7 +56,7 @@ class UserRegister(BaseModel):
     identification: str
     email: Optional[str] = None
     password: str
-    association_id: int = Field(..., description="ID de la asociación a la que se vincula el usuario")
+    association_id: Optional[int] = Field(None, description="ID de la asociación a la que se vincula el usuario (opcional)")
     class Config:
         schema_extra = {
             "example": {

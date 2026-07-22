@@ -236,12 +236,12 @@ async def update_association(
     status_code=status.HTTP_201_CREATED,
     response_model=StandardResponse,
     summary="Registrar usuario (público)",
-    description="Crea un usuario sin rol asignado. Un superadmin deberá asignarle un rol luego. Requiere `association_id` para vincularlo a una asociación.",
+    description="Crea un usuario sin rol asignado. Un superadmin deberá asignarle un rol luego. `association_id` es opcional; si se envía, debe corresponder a una asociación existente.",
 )
 async def register_user(user: UserRegister, repo: UserActivityRepository = Depends(get_repo)):
+    if user.association_id and not repo.get_association(user.association_id):
+        raise HTTPException(status_code=404, detail="Asociación no encontrada")
     try:
-        if not repo.get_association(user.association_id):
-            raise HTTPException(status_code=404, detail="Asociación no encontrada")
         user_data = user.dict()
         user_data["role"] = None
         repo.create_user(User(**user_data))
