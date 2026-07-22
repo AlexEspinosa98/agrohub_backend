@@ -29,6 +29,11 @@ def get_current_user(
     user = repo.get_user_by_token(token)
     if not user:
         raise HTTPException(status_code=401, detail="Token inválido")
+    if not user.get("role"):
+        raise HTTPException(
+            status_code=403,
+            detail="Tu cuenta aún no tiene un rol asignado. Contacta a un superadmin.",
+        )
     return user
 
 

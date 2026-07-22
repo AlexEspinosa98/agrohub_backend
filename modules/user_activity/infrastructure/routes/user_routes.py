@@ -435,7 +435,7 @@ async def admin_update_user(
     "/users/login",
     response_model=StandardResponse,
     summary="Login de usuario",
-    description="Autentica por teléfono o identificación. Retorna token y rol asignado.",
+    description="Autentica por teléfono, identificación o correo. Retorna token y rol asignado.",
 )
 async def login(payload: UserLogin, repo: UserActivityRepository = Depends(get_repo)):
     user = repo.get_user_by_phone_or_identification(payload.phone_or_identification)

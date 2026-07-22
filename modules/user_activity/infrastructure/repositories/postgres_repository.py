@@ -148,8 +148,8 @@ class UserActivityRepository:
     def get_user_by_phone_or_identification(self, value: str) -> Optional[dict]:
         with get_db_cursor() as cur:
             cur.execute(
-                "SELECT * FROM users WHERE phone = %s OR identification = %s",
-                (value, value),
+                "SELECT * FROM users WHERE phone = %s OR identification = %s OR email = %s",
+                (value, value, value),
             )
             return cur.fetchone()
 
