@@ -1,8 +1,9 @@
 import json
 import os
 import re
+import secrets
 import uuid
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import Optional, Any, List
 
 import requests as http_requests
@@ -16,6 +17,7 @@ from modules.user_activity.infrastructure.auth import (
     ensure_superadmin_token,
     get_current_user,
 )
+from modules.user_activity.infrastructure.email_service import send_otp_email
 
 from modules.user_activity.domain.entities import (
     Association,
@@ -27,6 +29,8 @@ from modules.user_activity.domain.entities import (
     Logbook,
     LogbookCreate,
     LogbookUpdate,
+    PasswordResetConfirm,
+    PasswordResetRequest,
     Role,
     RoleAssign,
     RoleCreate,
@@ -478,6 +482,62 @@ async def login(payload: UserLogin, repo: UserActivityRepository = Depends(get_r
             "email": user.get("email"),
         },
     )
+
+
+_OTP_TTL_MINUTES = 10
+_OTP_COOLDOWN_SECONDS = 60
+
+
+def _generate_otp() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+@router.post(
+    "/users/forgot-password",
+    response_model=StandardResponse,
+    summary="Solicitar código para restablecer contraseña",
+    description=(
+        f"Envía por correo un código OTP de 6 dígitos, válido por {_OTP_TTL_MINUTES} minutos. "
+        "Por seguridad, siempre responde con el mismo mensaje exista o no una cuenta con ese correo."
+    ),
+)
+async def forgot_password(payload: PasswordResetRequest, repo: UserActivityRepository = Depends(get_repo)):
+    generic_response = StandardResponse(
+        status=status.HTTP_200_OK,
+        message="Si el correo está registrado, se envió un código de verificación",
+        data=None,
+    )
+    user = repo.get_user_by_phone_or_identification(payload.email)
+    if not user or not user.get("email"):
+        return generic_response
+
+    existing_expiry = user.get("reset_otp_expires_at")
+    if existing_expiry:
+        requested_at = existing_expiry - timedelta(minutes=_OTP_TTL_MINUTES)
+        if (datetime.now() - requested_at).total_seconds() < _OTP_COOLDOWN_SECONDS:
+            raise HTTPException(status_code=429, detail="Espera un momento antes de solicitar otro código")
+
+    otp = _generate_otp()
+    repo.set_password_reset_otp(user["id"], otp, ttl_minutes=_OTP_TTL_MINUTES)
+    try:
+        send_otp_email(user["email"], otp, ttl_minutes=_OTP_TTL_MINUTES)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=503, detail="No se pudo enviar el correo, intenta más tarde") from exc
+    return generic_response
+
+
+@router.post(
+    "/users/reset-password",
+    response_model=StandardResponse,
+    summary="Restablecer contraseña con el código OTP",
+    description="Verifica el código enviado por correo y actualiza la contraseña. El código es de un solo uso.",
+)
+async def reset_password(payload: PasswordResetConfirm, repo: UserActivityRepository = Depends(get_repo)):
+    user = repo.get_user_by_phone_or_identification(payload.email)
+    if not user or not repo.verify_otp(user["id"], payload.otp):
+        raise HTTPException(status_code=400, detail="Código inválido o expirado")
+    repo.reset_password(user["id"], payload.new_password)
+    return StandardResponse(status=status.HTTP_200_OK, message="contraseña actualizada", data=None)
 
 
 @router.post(

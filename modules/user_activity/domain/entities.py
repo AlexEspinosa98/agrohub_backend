@@ -102,6 +102,16 @@ class UserLogin(BaseModel):
     password: str
 
 
+class PasswordResetRequest(BaseModel):
+    email: str = Field(..., description="Correo de la cuenta a la que se enviará el código OTP")
+
+
+class PasswordResetConfirm(BaseModel):
+    email: str
+    otp: str = Field(..., description="Código OTP de 6 dígitos recibido por correo")
+    new_password: str
+
+
 class SuperadminCreate(BaseModel):
     name: str
     phone: str

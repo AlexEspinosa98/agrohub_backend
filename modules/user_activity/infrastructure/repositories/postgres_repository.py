@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from typing import List, Optional
 import uuid
 import hashlib
@@ -74,6 +74,17 @@ class UserActivityRepository:
             # Migración: instalaciones existentes tenían `role` como NOT NULL DEFAULT 'user'.
             # Un usuario nuevo ahora nace sin rol hasta que un superadmin se lo asigna.
             cur.execute("ALTER TABLE users MODIFY role VARCHAR(50) DEFAULT NULL;")
+            # Migración: columnas para el flujo de OTP de recuperación de contraseña.
+            # MySQL no soporta "ADD COLUMN IF NOT EXISTS" de forma portable, así que
+            # se ignora el error si la columna ya existe (idempotente entre requests).
+            for stmt in (
+                "ALTER TABLE users ADD COLUMN reset_otp_hash VARCHAR(255) DEFAULT NULL",
+                "ALTER TABLE users ADD COLUMN reset_otp_expires_at DATETIME DEFAULT NULL",
+            ):
+                try:
+                    cur.execute(stmt)
+                except Exception:
+                    pass
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS logbooks (
@@ -155,6 +166,40 @@ class UserActivityRepository:
 
     def verify_password(self, plain: str, hashed: str) -> bool:
         return hashlib.sha256(plain.encode("utf-8")).hexdigest() == hashed
+
+    def set_password_reset_otp(self, user_id: int, otp: str, ttl_minutes: int) -> None:
+        otp_hash = hashlib.sha256(otp.encode("utf-8")).hexdigest()
+        expires_at = datetime.now() + timedelta(minutes=ttl_minutes)
+        with get_db_cursor() as cur:
+            cur.execute(
+                "UPDATE users SET reset_otp_hash = %s, reset_otp_expires_at = %s WHERE id = %s",
+                (otp_hash, expires_at, user_id),
+            )
+
+    def verify_otp(self, user_id: int, otp: str) -> bool:
+        with get_db_cursor() as cur:
+            cur.execute(
+                "SELECT reset_otp_hash, reset_otp_expires_at FROM users WHERE id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+        if not row or not row["reset_otp_hash"] or not row["reset_otp_expires_at"]:
+            return False
+        if datetime.now() > row["reset_otp_expires_at"]:
+            return False
+        return hashlib.sha256(otp.encode("utf-8")).hexdigest() == row["reset_otp_hash"]
+
+    def reset_password(self, user_id: int, new_password: str) -> None:
+        password_hash = hashlib.sha256(new_password.encode("utf-8")).hexdigest()
+        with get_db_cursor() as cur:
+            cur.execute(
+                """
+                UPDATE users
+                SET password_hash = %s, reset_otp_hash = NULL, reset_otp_expires_at = NULL, auth_token = NULL
+                WHERE id = %s
+                """,
+                (password_hash, user_id),
+            )
 
     def set_token(self, user_id: int) -> str:
         token = str(uuid.uuid4())
