@@ -46,7 +46,14 @@ class PersonaNutricionalDetail(BaseModel):
 
 class MiembroCreate(BaseModel):
     # Datos de la persona (se upsertean en personas_nutricionales)
-    cedula_participante: str
+    cedula_participante: Optional[str] = Field(
+        None,
+        description=(
+            "Cédula del participante. Si no se tiene (ej. menor sin documento), déjalo vacío/nulo: "
+            "el sistema genera automáticamente un identificador único para esa persona, en vez de "
+            "reutilizar un valor de relleno que podría chocar con otra persona distinta."
+        ),
+    )
     nombre_participante: Optional[str] = None
     edad_anios: Optional[int] = Field(None, ge=0, le=120)
     sexo: Optional[str] = Field(None, description="Hombre, Mujer, Otro")
@@ -73,6 +80,14 @@ class MiembroCreate(BaseModel):
 
 class MiembroUpdate(BaseModel):
     # Datos persona
+    cedula_participante: Optional[str] = Field(
+        None,
+        description=(
+            "Corrige la cédula del participante. Si la persona actual está compartida con otros "
+            "miembros (mismo cédula usada en varias encuestas), esto separa SOLO este registro hacia "
+            "una identidad propia, sin modificar los demás que aún comparten la cédula anterior."
+        ),
+    )
     nombre_participante: Optional[str] = None
     edad_anios: Optional[int] = None
     sexo: Optional[str] = None

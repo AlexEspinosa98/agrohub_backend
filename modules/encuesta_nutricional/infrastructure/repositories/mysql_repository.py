@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime
 from typing import List, Optional
 
@@ -185,10 +186,16 @@ class EncuestaNutricionalRepository:
     # Personas nutricionales
     # ------------------------------------------------------------------
 
-    def _upsert_persona(self, cur, cedula: str, nombre: Optional[str],
+    def _upsert_persona(self, cur, cedula: Optional[str], nombre: Optional[str],
                         edad_anios: Optional[int], sexo: Optional[str],
                         area_residencia: Optional[str], nivel_educativo: Optional[str]) -> int:
-        """Inserta o actualiza una persona por cédula. Devuelve su id."""
+        """Inserta o actualiza una persona por cédula. Devuelve su id.
+
+        Si no llega cédula (persona sin documento, ej. menor), se genera un
+        identificador único en vez de dejar que distintas personas anónimas
+        choquen bajo un mismo valor de relleno escrito a mano (ej. "12345")."""
+        if not cedula:
+            cedula = f"SIN-CEDULA-{uuid.uuid4().hex[:12].upper()}"
         cur.execute(
             """
             INSERT INTO personas_nutricionales
@@ -705,38 +712,69 @@ class EncuestaNutricionalRepository:
             "area_residencia": "area_residencia",
             "nivel_educativo": "nivel_educativo",
         }
-        persona_cols = {col: update_data[field]
-                        for field, col in PERSONA_MAP.items() if field in update_data}
+        persona_cambios = {col: update_data[field]
+                           for field, col in PERSONA_MAP.items() if field in update_data}
+        cedula_nueva = update_data.get("cedula_participante")
+        tocando_identidad = bool(persona_cambios) or "cedula_participante" in update_data
         miembro_cols = {f: update_data[f] for f in _MIEMBRO_UPDATABLE if f in update_data}
 
-        if not persona_cols and not miembro_cols:
+        if not tocando_identidad and not miembro_cols:
             return False
 
         with get_db_cursor() as cur:
             cur.execute(
-                "SELECT 1 FROM encuesta_nutricional_miembros "
+                "SELECT persona_id FROM encuesta_nutricional_miembros "
                 "WHERE id = %s AND encuesta_id = %s AND is_active = 1",
                 (miembro_id, encuesta_id),
             )
-            if not cur.fetchone():
+            row = cur.fetchone()
+            if not row:
                 return False
+            persona_id_actual = row["persona_id"]
 
-        if persona_cols:
-            pf = [f"p.{col} = %s" for col in persona_cols]
-            pv = list(persona_cols.values()) + [miembro_id, encuesta_id]
-            with get_db_cursor() as cur:
+            if tocando_identidad:
+                cur.execute("SELECT * FROM personas_nutricionales WHERE id = %s", (persona_id_actual,))
+                persona_actual = cur.fetchone()
+
                 cur.execute(
-                    f"UPDATE personas_nutricionales p "
-                    f"JOIN encuesta_nutricional_miembros m ON m.persona_id = p.id "
-                    f"SET {', '.join(pf)} "
-                    f"WHERE m.id = %s AND m.encuesta_id = %s",
-                    pv,
+                    "SELECT COUNT(*) AS total FROM encuesta_nutricional_miembros "
+                    "WHERE persona_id = %s AND is_active = 1",
+                    (persona_id_actual,),
                 )
+                compartida = cur.fetchone()["total"] > 1
 
-        if miembro_cols:
-            mf = [f"{f} = %s" for f in miembro_cols]
-            mv = list(miembro_cols.values()) + [miembro_id, encuesta_id]
-            with get_db_cursor() as cur:
+                if compartida or "cedula_participante" in update_data:
+                    # La persona actual la usan otros miembros (o se está corrigiendo la cédula
+                    # explícitamente): NO se muta esa fila compartida. Se resuelve/crea una identidad
+                    # propia para ESTE miembro (por la cédula nueva, o generada si viene vacía) y solo
+                    # se repunta este registro — los demás que aún comparten la persona anterior
+                    # quedan intactos.
+                    nuevo_persona_id = self._upsert_persona(
+                        cur,
+                        cedula=cedula_nueva,
+                        nombre=persona_cambios.get("nombre", persona_actual["nombre"]),
+                        edad_anios=persona_cambios.get("edad_anios", persona_actual["edad_anios"]),
+                        sexo=persona_cambios.get("sexo", persona_actual["sexo"]),
+                        area_residencia=persona_cambios.get("area_residencia", persona_actual["area_residencia"]),
+                        nivel_educativo=persona_cambios.get("nivel_educativo", persona_actual["nivel_educativo"]),
+                    )
+                    cur.execute(
+                        "UPDATE encuesta_nutricional_miembros SET persona_id = %s "
+                        "WHERE id = %s AND encuesta_id = %s",
+                        (nuevo_persona_id, miembro_id, encuesta_id),
+                    )
+                else:
+                    # Persona exclusiva de este miembro: seguro actualizar en el sitio.
+                    pf = [f"{col} = %s" for col in persona_cambios]
+                    pv = list(persona_cambios.values()) + [persona_id_actual]
+                    cur.execute(
+                        f"UPDATE personas_nutricionales SET {', '.join(pf)} WHERE id = %s",
+                        pv,
+                    )
+
+            if miembro_cols:
+                mf = [f"{f} = %s" for f in miembro_cols]
+                mv = list(miembro_cols.values()) + [miembro_id, encuesta_id]
                 cur.execute(
                     f"UPDATE encuesta_nutricional_miembros SET {', '.join(mf)} "
                     f"WHERE id = %s AND encuesta_id = %s AND is_active = 1",
