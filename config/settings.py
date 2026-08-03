@@ -87,7 +87,7 @@ TIME_ZONE = "America/Bogota"
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = "static/"
+STATIC_URL = os.getenv("DJANGO_STATIC_URL", "static/")
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {
@@ -98,7 +98,7 @@ STORAGES = {
     },
 }
 
-MEDIA_URL = "media/"
+MEDIA_URL = os.getenv("DJANGO_MEDIA_URL", "media/")
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.AutoField"

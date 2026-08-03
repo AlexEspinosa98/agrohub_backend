@@ -9,3 +9,5 @@ modelo_guardado/*requirements.txt.bak
 
 ./images/*
 /images
+staticfiles/
+gunicorn-*.log
