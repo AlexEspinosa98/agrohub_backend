@@ -1,3 +1,0 @@
-"""
-Common unit tests package.
-"""

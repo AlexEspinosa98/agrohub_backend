@@ -2,17 +2,13 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "FastAPI Debug",
+      "name": "Django Debug",
       "type": "python",
       "request": "launch",
-      "module": "uvicorn",
-      "args": [
-        "main:app",
-        "--reload",
-        "--port",
-        "8000"
-      ],
-      "jinja": true
+      "program": "${workspaceFolder}/manage.py",
+      "args": ["runserver", "8000"],
+      "django": true,
+      "justMyCode": true
     }
   ]
 }
