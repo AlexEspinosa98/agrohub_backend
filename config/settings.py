@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "apps.data_characterization",
     "apps.hub_cgsm",
     "apps.encuesta_nutricional",
+    "apps.riego_iot",
 ]
 
 MIDDLEWARE = [
@@ -73,8 +74,22 @@ DATABASES = {
         "OPTIONS": {
             "charset": "utf8mb4",
         },
-    }
+    },
+    # apps.riego_iot (gateways de riego IoT) vive en Postgres, no MySQL — es la misma base
+    # 'agrohub_mqtt' que ya llena el daemon de ingesta del repo mqtt_agrohub (proceso Python
+    # aparte, corriendo 24/7 en este servidor, suscrito por MQTT a los gateways). Sus modelos son
+    # managed=False (ver apps/riego_iot/models.py) y config/db_routers.py enruta todo lo de esa
+    # app aquí — nunca se corre `migrate` sobre esta base, las tablas ya existen.
+    "mqtt": {
+        "ENGINE": "django.db.backends.postgresql",
+        "HOST": os.getenv("MQTT_DB_HOST", "localhost"),
+        "PORT": os.getenv("MQTT_DB_PORT", "5434"),
+        "NAME": os.getenv("MQTT_DB_NAME", "agrohub_mqtt"),
+        "USER": os.getenv("MQTT_DB_USER", "agrohub_mqtt"),
+        "PASSWORD": os.getenv("MQTT_DB_PASSWORD", ""),
+    },
 }
+DATABASE_ROUTERS = ["config.db_routers.RiegoIotRouter"]
 
 AUTH_PASSWORD_VALIDATORS = []
 
@@ -137,6 +152,15 @@ MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "AgroHub")
 
 ENABLE_TRANSCRIBE = os.getenv("ENABLE_TRANSCRIBE", "false").lower() == "true"
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "tiny")
+
+# ---------------------------------------------------------------------------
+# apps.riego_iot — administración de gateways AgroHub (riego IoT) y credenciales de Mosquitto.
+# Ver apps/riego_iot/mosquitto_admin.py y el README de mqtt_agrohub, sección "Permisos que
+# necesita" (grupo mosquitto-admin + regla de sudoers para "systemctl reload mosquitto").
+# ---------------------------------------------------------------------------
+RIEGO_IOT_API_KEY = os.getenv("RIEGO_IOT_API_KEY")
+RIEGO_IOT_MOSQUITTO_PASSWD_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_PASSWD_FILE", "/etc/mosquitto/passwd")
+RIEGO_IOT_MOSQUITTO_ACL_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_ACL_FILE", "/etc/mosquitto/acl.conf")
 
 LOGGING = {
     "version": 1,
