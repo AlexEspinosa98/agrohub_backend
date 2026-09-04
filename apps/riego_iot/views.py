@@ -2,6 +2,14 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from django.utils.dateparse import parse_datetime
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import NotFound, ParseError, ValidationError
 from rest_framework.response import Response
@@ -18,6 +26,50 @@ from apps.riego_iot.serializers import DispositivoCrearSerializer, DispositivoSe
 # failover nube->local, mismo criterio con el que el propio gateway decide "perdí la nube".
 VENTANA_CONEXION = timedelta(minutes=3)
 
+_API_KEY_HEADER = OpenApiParameter(
+    "X-API-Key", str, OpenApiParameter.HEADER, required=True,
+    description="API key única de administración de riego IoT (interna, no es la del usuario final).",
+)
+
+_LECTURA_QUERY_PARAMS = [
+    _API_KEY_HEADER,
+    OpenApiParameter("desde", str, OpenApiParameter.QUERY, description="ISO 8601. Default: hasta - 7 días."),
+    OpenApiParameter("hasta", str, OpenApiParameter.QUERY, description="ISO 8601. Default: ahora."),
+    OpenApiParameter("limite", int, OpenApiParameter.QUERY, description="Tope de filas, máx. 5000.", default=500),
+]
+
+def _resumen_fields():
+    return {
+        "device_id": serializers.CharField(),
+        "en_linea": serializers.BooleanField(),
+        "ultimo_visto": serializers.DateTimeField(allow_null=True),
+        "modo_control": serializers.ChoiceField(choices=["nube", "local"], allow_null=True),
+        "ambiente": inline_serializer("AmbienteResumen", {
+            "medido_en": serializers.DateTimeField(), "temperatura": serializers.FloatField(allow_null=True),
+            "humedad": serializers.FloatField(allow_null=True), "dev_eui": serializers.CharField(allow_null=True),
+        }, allow_null=True),
+        "suelo": inline_serializer("SueloResumen", {
+            "medido_en": serializers.DateTimeField(), "humedad_suelo": serializers.FloatField(allow_null=True),
+            "temperatura_suelo": serializers.FloatField(allow_null=True), "conductividad": serializers.FloatField(allow_null=True),
+            "dev_eui": serializers.CharField(allow_null=True),
+        }, allow_null=True),
+        "valvulas": inline_serializer("ValvulasResumen", {
+            "medido_en": serializers.DateTimeField(), "ro1": serializers.BooleanField(allow_null=True),
+            "ro2": serializers.BooleanField(allow_null=True),
+            "origen": serializers.ChoiceField(choices=["auto", "remoto", "manual", "reportado"], allow_null=True),
+            "ultimo_comando": serializers.CharField(allow_null=True),
+        }, allow_null=True),
+        "health": inline_serializer("HealthResumen", {
+            "medido_en": serializers.DateTimeField(), "mqtt_conectado": serializers.BooleanField(allow_null=True),
+            "modo_control": serializers.ChoiceField(choices=["nube", "local"], allow_null=True),
+            "override_manual": serializers.BooleanField(allow_null=True), "valvulas": serializers.JSONField(allow_null=True),
+        }, allow_null=True),
+    }
+
+
+ResumenDispositivoSerializer = type("ResumenDispositivoSerializer", (serializers.Serializer,), _resumen_fields())
+_RESUMEN_RESPONSE = ResumenDispositivoSerializer()
+
 
 def _generar_password():
     return secrets.token_hex(16)
@@ -30,6 +82,46 @@ def _obtener_dispositivo_o_404(device_id):
     return dispositivo
 
 
+@extend_schema(
+    methods=["GET"],
+    tags=["riego-iot"],
+    summary="Listar gateways registrados",
+    parameters=[
+        _API_KEY_HEADER,
+        OpenApiParameter("solo_activos", str, OpenApiParameter.QUERY, description="'true' para excluir los dados de baja."),
+    ],
+    responses={200: DispositivoSerializer(many=True)},
+)
+@extend_schema(
+    methods=["POST"],
+    tags=["riego-iot"],
+    summary="Registrar un gateway nuevo (crea su credencial MQTT real en Mosquitto)",
+    description=(
+        "Efecto colateral real: crea usuario+ACL en Mosquitto (mosquitto_admin.crear_credencial) "
+        "y recarga el broker. La contraseña generada se devuelve UNA sola vez — no queda guardada "
+        "en ningún lado en texto plano, ver `nota` en la respuesta."
+    ),
+    parameters=[_API_KEY_HEADER],
+    request=DispositivoCrearSerializer,
+    examples=[OpenApiExample("Registrar gateway", value={
+        "device_id": "device0017", "client_id": "ug56-agrohub17", "nombre": "Finca La Esperanza",
+    }, request_only=True)],
+    responses={
+        201: OpenApiResponse(
+            response=inline_serializer("DispositivoCreado", {
+                "device_id": serializers.CharField(), "client_id": serializers.CharField(),
+                "base_topic": serializers.CharField(), "password": serializers.CharField(),
+                "nota": serializers.CharField(),
+            }),
+            examples=[OpenApiExample("Creado", value={
+                "device_id": "device0017", "client_id": "ug56-agrohub17", "base_topic": "ahub/device0017",
+                "password": "3f9a1c...(32 hex)", "nota": "Guarda esta contraseña ahora — no se puede volver a consultar. ...",
+            })],
+        ),
+        400: OpenApiResponse(description="device_id/client_id con formato inválido, o ya existe un dispositivo activo con ese device_id."),
+        502: OpenApiResponse(description="Falló mosquitto_admin (no se pudo escribir la credencial o recargar el broker)."),
+    },
+)
 @api_view(["GET", "POST"])
 @permission_classes([TieneApiKeyRiego])
 def dispositivos(request):
@@ -88,6 +180,25 @@ def dispositivos(request):
     )
 
 
+@extend_schema(
+    methods=["GET"],
+    tags=["riego-iot"],
+    summary="Detalle de un gateway registrado",
+    parameters=[_API_KEY_HEADER],
+    responses={200: DispositivoSerializer, 404: OpenApiResponse(description="No existe ese device_id.")},
+)
+@extend_schema(
+    methods=["DELETE"],
+    tags=["riego-iot"],
+    summary="Dar de baja un gateway (revoca su credencial MQTT, no borra sus lecturas históricas)",
+    parameters=[_API_KEY_HEADER],
+    responses={
+        204: OpenApiResponse(description="Credencial eliminada de Mosquitto y dispositivo marcado inactivo."),
+        400: OpenApiResponse(description="El dispositivo no tiene client_id registrado (fue detectado solo por telemetría) — hay que borrar su credencial a mano en Mosquitto."),
+        404: OpenApiResponse(description="No existe ese device_id."),
+        502: OpenApiResponse(description="Falló mosquitto_admin al eliminar la credencial."),
+    },
+)
 @api_view(["GET", "DELETE"])
 @permission_classes([TieneApiKeyRiego])
 def dispositivo_detalle(request, device_id):
@@ -113,6 +224,27 @@ def dispositivo_detalle(request, device_id):
     return Response(status=204)
 
 
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Rotar la contraseña MQTT de un gateway",
+    description="La contraseña anterior deja de funcionar de inmediato al aplicarse (recarga el broker).",
+    parameters=[_API_KEY_HEADER],
+    request=None,
+    responses={
+        200: OpenApiResponse(
+            response=inline_serializer("PasswordRotado", {
+                "client_id": serializers.CharField(), "password": serializers.CharField(), "nota": serializers.CharField(),
+            }),
+            examples=[OpenApiExample("OK", value={
+                "client_id": "ug56-agrohub1", "password": "9c2e...(32 hex)",
+                "nota": "Guarda esta contraseña ahora y actualízala en el gateway — la anterior deja de funcionar de inmediato.",
+            })],
+        ),
+        400: OpenApiResponse(description="El dispositivo no tiene client_id registrado."),
+        404: OpenApiResponse(description="No existe ese device_id."),
+        502: OpenApiResponse(description="Falló mosquitto_admin al rotar la contraseña."),
+    },
+)
 @api_view(["POST"])
 @permission_classes([TieneApiKeyRiego])
 def rotar_password_dispositivo(request, device_id):
@@ -167,6 +299,13 @@ def _resumen_dispositivo(device_id):
     }
 
 
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Resumen en vivo de todos los gateways activos",
+    description="Última lectura de cada tipo (ambiente/suelo/válvulas/health) por dispositivo — la forma más rápida de ver qué está reportando cada uno ahora mismo.",
+    parameters=[_API_KEY_HEADER],
+    responses={200: ResumenDispositivoSerializer(many=True)},
+)
 @api_view(["GET"])
 @permission_classes([TieneApiKeyRiego])
 def dashboard_resumen(request):
@@ -176,6 +315,12 @@ def dashboard_resumen(request):
     return Response([_resumen_dispositivo(device_id) for device_id in ids])
 
 
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Resumen en vivo de un gateway puntual",
+    parameters=[_API_KEY_HEADER],
+    responses={200: _RESUMEN_RESPONSE, 404: OpenApiResponse(description="No existe ese device_id.")},
+)
 @api_view(["GET"])
 @permission_classes([TieneApiKeyRiego])
 def dashboard_detalle(request, device_id):
@@ -193,6 +338,16 @@ def _rango_fechas(request):
     return desde, hasta, min(limite, 5000)
 
 
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Histórico de lecturas de ambiente (temperatura/humedad) de un gateway",
+    parameters=_LECTURA_QUERY_PARAMS,
+    responses={200: inline_serializer("LecturaAmbienteItem", {
+        "medido_en": serializers.DateTimeField(), "temperatura": serializers.FloatField(allow_null=True),
+        "humedad": serializers.FloatField(allow_null=True), "dev_eui": serializers.CharField(allow_null=True),
+        "recuperado": serializers.BooleanField(),
+    }, many=True)},
+)
 @api_view(["GET"])
 @permission_classes([TieneApiKeyRiego])
 def lecturas_ambiente_dispositivo(request, device_id):
@@ -210,6 +365,16 @@ def lecturas_ambiente_dispositivo(request, device_id):
     ])
 
 
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Histórico de lecturas de suelo (humedad/temperatura/conductividad) de un gateway",
+    parameters=_LECTURA_QUERY_PARAMS,
+    responses={200: inline_serializer("LecturaSueloItem", {
+        "medido_en": serializers.DateTimeField(), "humedad_suelo": serializers.FloatField(allow_null=True),
+        "temperatura_suelo": serializers.FloatField(allow_null=True), "conductividad": serializers.FloatField(allow_null=True),
+        "dev_eui": serializers.CharField(allow_null=True), "recuperado": serializers.BooleanField(),
+    }, many=True)},
+)
 @api_view(["GET"])
 @permission_classes([TieneApiKeyRiego])
 def lecturas_suelo_dispositivo(request, device_id):

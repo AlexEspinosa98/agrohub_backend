@@ -1,3 +1,4 @@
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
@@ -36,3 +37,20 @@ class TokenHeaderAuthentication(BaseAuthentication):
 
     def authenticate_header(self, request):
         return "Token"
+
+
+class TokenHeaderAuthenticationScheme(OpenApiAuthenticationExtension):
+    """Le enseña a drf-spectacular cómo documentar TokenHeaderAuthentication — sin esto
+    aparece como 'no se pudo resolver el authenticator' y las vistas que la usan quedan sin
+    security scheme en el schema/Swagger."""
+
+    target_class = "apps.user_activity.authentication.TokenHeaderAuthentication"
+    name = "TokenAuth"
+
+    def get_security_definition(self, auto_schema):
+        return {
+            "type": "apiKey",
+            "in": "header",
+            "name": "Authorization",
+            "description": "Formato: 'Token <token>' — el token de sesión que devuelve POST /user-activity/users/login.",
+        }

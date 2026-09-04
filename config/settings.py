@@ -10,6 +10,10 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "insecure-dev-key-change-in-producti
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
 
+# Prefijo con el que nginx monta esta app (ej. /api/agrohub) — hace que Django
+# genere URLs (reverse(), admin, drf-spectacular) con el prefijo correcto.
+FORCE_SCRIPT_NAME = os.getenv("DJANGO_FORCE_SCRIPT_NAME") or None
+
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -19,6 +23,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "rest_framework",
     "corsheaders",
+    "drf_spectacular",
     "apps.user_activity",
     "apps.data_characterization",
     "apps.hub_cgsm",
@@ -130,6 +135,23 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "config.exceptions.agrohub_exception_handler",
     "DEFAULT_PAGINATION_CLASS": None,
     "UNAUTHENTICATED_USER": "apps.user_activity.authentication.AnonymousUser",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# ---------------------------------------------------------------------------
+# drf-spectacular — schema OpenAPI para /docs/. Varias vistas son @api_view planas (no
+# ViewSets/generics), así que el autodetect no siempre infiere bien: se van agregando
+# @extend_schema explícitos por vista para que el body/response queden completos.
+# ---------------------------------------------------------------------------
+SPECTACULAR_SETTINGS = {
+    "TITLE": "AgroHub API",
+    "DESCRIPTION": (
+        "API del backend AgroHub (Universidad del Magdalena): encuestas de caracterización, "
+        "HUB CGSM, actividad de usuarios/autenticación, encuesta nutricional y administración "
+        "de gateways de riego IoT."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20MB, for survey photo uploads

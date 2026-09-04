@@ -11,3 +11,4 @@ modelo_guardado/*requirements.txt.bak
 /images
 staticfiles/
 gunicorn-*.log
+credenciales_gateways.json

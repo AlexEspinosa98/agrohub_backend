@@ -1,3 +1,11 @@
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
+from rest_framework import serializers
 from rest_framework.decorators import api_view
 from rest_framework.exceptions import NotFound, ParseError, ValidationError
 from rest_framework.response import Response
@@ -9,6 +17,7 @@ from apps.data_characterization.models import (
 )
 from apps.data_characterization.serializers import (
     SERIALIZER_BY_TYPE,
+    AgrohubSurveySerializer,
     SurveyListRequestSerializer,
 )
 
@@ -47,6 +56,118 @@ def _fetch_type(model, page, page_size, email, start_date, end_date, survey_id):
     return [_instance_to_dict(obj) for obj in qs]
 
 
+# --- ejemplos reales de cada tipo de encuesta, reusados en POST y PUT ---
+_EXAMPLE_AGROHUB = {
+    "type": "agrohub",
+    "email": "aplicador@unimagdalena.edu.co",
+    "nombre_aplicador": "Ana Pérez",
+    "fecha_aplicacion": "2026-03-10",
+    "municipio": "Santa Marta",
+    "vereda": "Bonda",
+    "nombre_organizacion": "Asociación de Productores Bonda",
+    "tipo_organizacion": "Asociación",
+    "anio_conformacion": 2015,
+    "numero_miembros": 24,
+    "numero_nucleos_familiares": 18,
+    "cultivan_hortalizas": "si",
+    "area_hortalizas": 2,
+    "latitud": "11.2408",
+    "longitud": "-74.1990",
+}
+_EXAMPLE_EDUCATIVA = {
+    "type": "educativa",
+    "email": "aplicador@unimagdalena.edu.co",
+    "nombre_aplicador": "Carlos Ruiz",
+    "fecha_aplicacion": "2026-03-10",
+    "municipio": "Ciénaga",
+    "vereda": "Cordobita",
+    "nombre_institucion": "IE Rural Cordobita",
+    "codigo_dane": "247189000123",
+    "numero_estudiantes": 340,
+    "numero_docentes": 15,
+    "tiene_prae": True,
+    "tiene_huerta": True,
+    "area_huerta": 1,
+    "latitud": "10.9908",
+    "longitud": "-74.2967",
+}
+_EXAMPLE_DHA = {
+    "type": "derecho_humano_alimentario",
+    "email": "aplicador@unimagdalena.edu.co",
+    "fecha_aplicacion": "2026-03-10",
+    "nombre_jefe_hogar": "María Gómez",
+    "edad": 45,
+    "genero": "femenino",
+    "departamento": "Magdalena",
+    "municipio": "Aracataca",
+    "numero_miembros_hogar": 5,
+    "dedicado_agricultura": True,
+    "cultivos_principales": "yuca, plátano",
+    "cobertura_necesidades": False,
+    "meses_escasez": "junio-agosto",
+}
+
+_SURVEY_LIST_EXAMPLE = OpenApiExample(
+    "Lote con los 3 tipos de encuesta",
+    summary="POST /surveys/ — un email, varias encuestas de distinto tipo en un solo lote",
+    description=(
+        "`surveys[].type` decide contra cuál de los 3 esquemas se valida cada elemento: "
+        "`agrohub` (AgrohubSurveySerializer), `educativa` (EducativaSurveySerializer) o "
+        "`derecho_humano_alimentario` (DerechoHumanoAlimentarioSurveySerializer). Todos los "
+        "campos salvo `type`/`email`/`fecha_aplicacion` son opcionales."
+    ),
+    value={
+        "email": "aplicador@unimagdalena.edu.co",
+        "surveys": [_EXAMPLE_AGROHUB, _EXAMPLE_EDUCATIVA, _EXAMPLE_DHA],
+    },
+    request_only=True,
+)
+
+
+@extend_schema(
+    methods=["GET"],
+    tags=["data-characterization"],
+    summary="Listar encuestas de caracterización (los 3 tipos, con filtros y paginación)",
+    parameters=[
+        OpenApiParameter("page", int, OpenApiParameter.QUERY, description="Página, 1-indexada.", default=1),
+        OpenApiParameter("page_size", int, OpenApiParameter.QUERY, description="Tamaño de página.", default=10),
+        OpenApiParameter(
+            "surveyType", str, OpenApiParameter.QUERY,
+            description="Filtra a un solo tipo. Si se omite, junta los 3 tipos ordenados por fecha_creacion.",
+            enum=["agrohub", "educativa", "derecho_humano_alimentario"],
+        ),
+        OpenApiParameter("email", str, OpenApiParameter.QUERY, description="Filtra por email exacto del aplicador."),
+        OpenApiParameter("startDate", str, OpenApiParameter.QUERY, description="fecha_creacion >= este valor (YYYY-MM-DD)."),
+        OpenApiParameter("endDate", str, OpenApiParameter.QUERY, description="fecha_creacion <= este valor (YYYY-MM-DD)."),
+        OpenApiParameter("id", int, OpenApiParameter.QUERY, description="Filtra por id exacto de la encuesta."),
+    ],
+    responses={200: OpenApiResponse(
+        response=inline_serializer("SurveyListItem", {
+            "id": serializers.IntegerField(),
+            "type": serializers.ChoiceField(choices=["agrohub", "educativa", "derecho_humano_alimentario"]),
+        }),
+        description="Lista de encuestas — cada objeto trae `id`, `type` y todos los campos propios de ese tipo (ver los 3 serializers).",
+    )},
+)
+@extend_schema(
+    methods=["POST"],
+    tags=["data-characterization"],
+    summary="Guardar un lote de encuestas (una o varias, de cualquiera de los 3 tipos)",
+    description=(
+        "Todo-o-nada: si cualquier elemento de `surveys` falla su validación, no se guarda "
+        "ninguno y el 400 devuelve los errores por índice en `surveys.<i>.<campo>`."
+    ),
+    request=SurveyListRequestSerializer,
+    examples=[_SURVEY_LIST_EXAMPLE],
+    responses={
+        201: OpenApiResponse(
+            response=inline_serializer("SurveysSavedResponse", {"message": serializers.CharField()}),
+            description="Todas las encuestas del lote se guardaron.",
+            examples=[OpenApiExample("OK", value={"message": "Surveys saved successfully"})],
+        ),
+        400: OpenApiResponse(description="Errores de validación, uno por índice de `surveys`."),
+    },
+)
 @api_view(["GET", "POST"])
 def surveys_list_create(request):
     if request.method == "POST":
@@ -115,6 +236,25 @@ def _get_all_surveys(request):
     return Response(results)
 
 
+@extend_schema(
+    tags=["data-characterization"],
+    summary="Actualizar (parcial) una encuesta existente",
+    description=(
+        "`type` en el body determina contra cuál de los 3 esquemas se valida — debe coincidir "
+        "con el tipo real de la encuesta con ese `id`. Cualquier campo del tipo correspondiente "
+        "es aceptado como actualización parcial; `id`/`type`/`fecha_creacion` se ignoran si vienen."
+    ),
+    request=AgrohubSurveySerializer,  # forma base — ver los 3 examples de abajo para educativa/derecho_humano_alimentario
+    examples=[
+        OpenApiExample("agrohub", value=_EXAMPLE_AGROHUB, request_only=True),
+        OpenApiExample("educativa", value=_EXAMPLE_EDUCATIVA, request_only=True),
+        OpenApiExample("derecho_humano_alimentario", value=_EXAMPLE_DHA, request_only=True),
+    ],
+    responses={
+        200: OpenApiResponse(description="Encuesta actualizada — devuelve el objeto completo con los nuevos valores."),
+        404: OpenApiResponse(description="No existe una encuesta con ese id (o el body no trajo ningún campo válido para actualizar)."),
+    },
+)
 @api_view(["PUT"])
 def update_survey(request, id: int):
     survey_type = request.data.get("type")
@@ -142,6 +282,20 @@ def update_survey(request, id: int):
     return Response(_instance_to_dict(instance))
 
 
+@extend_schema(
+    tags=["data-characterization"],
+    summary="Puntos geográficos de las 3 encuestas (para el mapa)",
+    description="Sin filtros ni paginación — junta las 3 tablas, solo filas con latitud/longitud no vacías.",
+    responses={200: OpenApiResponse(
+        response=inline_serializer("SurveyLocation", {
+            "type": serializers.ChoiceField(choices=["agrohub", "instituciones educativas", "caracterizacion agro-alimentaria"]),
+            "latitud": serializers.CharField(),
+            "longitud": serializers.CharField(),
+            "municipio": serializers.CharField(allow_null=True),
+            "fecha_aplicacion": serializers.DateField(allow_null=True),
+        }),
+    )},
+)
 @api_view(["GET"])
 def get_all_locations(request):
     results = []

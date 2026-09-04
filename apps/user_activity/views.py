@@ -9,7 +9,15 @@ from django.db import IntegrityError
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
-from rest_framework import status
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    extend_schema_view,
+    inline_serializer,
+)
+from rest_framework import serializers, status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.exceptions import NotFound, ParseError, PermissionDenied, Throttled
 from rest_framework.permissions import AllowAny
@@ -55,6 +63,26 @@ from apps.user_activity.whatsapp_service import (
     find_user_by_wa_phone,
     send_whatsapp_message,
 )
+
+TAG = "user-activity"
+_TOKEN_NOTE = "Requiere `Authorization: Token <token>` (obtenido en POST /user-activity/users/login)."
+
+
+def _envelope(data_field=None, name="Ok"):
+    fields = {"status": serializers.IntegerField(), "message": serializers.CharField()}
+    if data_field is not None:
+        fields["data"] = data_field
+    return inline_serializer(f"Envelope{name}", fields)
+
+
+_ERROR_DETAIL = inline_serializer("ErrorDetail", {"detail": serializers.CharField()})
+
+
+def _err(detail_example="mensaje de error"):
+    return OpenApiResponse(
+        response=_ERROR_DETAIL,
+        examples=[OpenApiExample("Error", value={"detail": detail_example})],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -126,10 +154,79 @@ def _serialize_logbook(l: Logbook, association_name=None) -> dict:
     }
 
 
+# --- Serializers de respuesta reusables ---
+def _association_item_fields():
+    return {
+        "id": serializers.IntegerField(), "name": serializers.CharField(),
+        "municipality": serializers.CharField(allow_null=True),
+    }
+
+
+def _association_full_fields():
+    return {
+        "id": serializers.IntegerField(), "name": serializers.CharField(),
+        "latitude": serializers.FloatField(allow_null=True), "longitude": serializers.FloatField(allow_null=True),
+        "department": serializers.CharField(allow_null=True), "municipality": serializers.CharField(allow_null=True),
+        "vereda": serializers.CharField(allow_null=True), "created_at": serializers.DateTimeField(),
+    }
+
+
+def _user_public_fields():
+    return {
+        "id": serializers.IntegerField(), "name": serializers.CharField(), "phone": serializers.CharField(),
+        "identification": serializers.CharField(), "email": serializers.CharField(allow_null=True),
+        "association_id": serializers.IntegerField(allow_null=True), "role": serializers.CharField(allow_null=True),
+        "created_at": serializers.DateTimeField(),
+    }
+
+
+def _role_item_fields():
+    return {
+        "id": serializers.IntegerField(), "name": serializers.CharField(),
+        "description": serializers.CharField(allow_null=True), "created_at": serializers.DateTimeField(),
+    }
+
+
+def _logbook_item_fields():
+    return {
+        "id": serializers.IntegerField(), "title": serializers.CharField(), "description": serializers.CharField(),
+        "activity_date": serializers.DateField(), "created_at": serializers.DateTimeField(),
+        "association_name": serializers.CharField(allow_null=True),
+    }
+
+
+_ASSOCIATION_FULL = inline_serializer("Association", _association_full_fields())
+
+# Clases reales (no inline_serializer) para las que necesitamos tanto la forma singular como
+# many=True — instanciar dos veces la MISMA clase, en vez de llamar inline_serializer() dos
+# veces con el mismo nombre, evita el warning de "2 components con nombre idéntico".
+UserPublicSerializer = type("UserPublicSerializer", (serializers.Serializer,), _user_public_fields())
+LogbookItemSerializer = type("LogbookItemSerializer", (serializers.Serializer,), _logbook_item_fields())
+_USER_PUBLIC = UserPublicSerializer()
+_LOGBOOK_ITEM = LogbookItemSerializer()
+
+
 # ---------------------------------------------------------------------------
 # Associations
 # ---------------------------------------------------------------------------
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=[TAG], summary="Listar asociaciones (público)",
+        responses={200: _envelope(inline_serializer("AssociationListItem", _association_item_fields(), many=True), "AssociationList")},
+    ),
+    post=extend_schema(
+        tags=[TAG], summary="Crear asociación (requiere rol admin/superadmin)",
+        description=_TOKEN_NOTE, auth=["TokenAuth"],
+        request=AssociationCreateSerializer,
+        responses={
+            201: OpenApiResponse(response=_envelope(name="AssociationCreated"), examples=[
+                OpenApiExample("OK", value={"status": 201, "message": "asociación creada", "data": None})]),
+            401: _err("Falta header Authorization: Token <token>"),
+            403: _err("Requiere rol admin"),
+        },
+    ),
+)
 class AssociationListCreateView(APIView):
     """GET is public (list), POST requires admin — two different permission
     sets on the same path, so this can't be a plain @api_view function."""
@@ -155,6 +252,24 @@ class AssociationListCreateView(APIView):
         )
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=[TAG], summary="Detalle de una asociación (público)",
+        responses={200: _envelope(_ASSOCIATION_FULL, "AssociationDetail"), 404: _err("Asociación no encontrada")},
+    ),
+    put=extend_schema(
+        tags=[TAG], summary="Actualizar (parcial) una asociación (requiere rol admin/superadmin)",
+        description=_TOKEN_NOTE, auth=["TokenAuth"],
+        request=AssociationUpdateSerializer,
+        responses={
+            200: _envelope(name="AssociationUpdated"),
+            400: _err("Nada para actualizar"),
+            401: _err("Falta header Authorization: Token <token>"),
+            403: _err("Requiere rol admin"),
+            404: _err("Asociación no encontrada"),
+        },
+    ),
+)
 class AssociationDetailView(APIView):
     """GET is public, PUT requires admin."""
 
@@ -196,6 +311,17 @@ class AssociationDetailView(APIView):
 # Users
 # ---------------------------------------------------------------------------
 
+@extend_schema(
+    tags=[TAG],
+    summary="Auto-registro de usuario (público, sin rol asignado)",
+    description="El usuario queda sin `role` (null) hasta que un superadmin se lo asigne (ver PUT /users/{id}/role).",
+    request=UserRegisterSerializer,
+    responses={
+        201: OpenApiResponse(response=_envelope(name="UserRegistered")),
+        400: _err("Teléfono o identificación ya registrados"),
+        404: _err("Asociación no encontrada"),
+    },
+)
 @api_view(["POST"])
 def register_user(request):
     serializer = UserRegisterSerializer(data=request.data)
@@ -221,6 +347,19 @@ def register_user(request):
     )
 
 
+@extend_schema(
+    tags=[TAG],
+    summary="Crear el primer superadmin (bootstrap — sin sesión, con token de servidor)",
+    description="No usa `Authorization`, sino el header `X-Superadmin-Token` (= settings.SUPERADMIN_TOKEN).",
+    parameters=[OpenApiParameter("X-Superadmin-Token", str, OpenApiParameter.HEADER, required=True)],
+    request=SuperadminCreateSerializer,
+    responses={
+        201: OpenApiResponse(response=_envelope(name="SuperadminCreated")),
+        400: _err("Teléfono o identificación ya registrados"),
+        403: _err("Token de superadmin inválido"),
+        404: _err("Asociación no encontrada"),
+    },
+)
 @api_view(["POST"])
 @permission_classes([HasSuperadminServerToken])
 def create_superadmin(request):
@@ -247,6 +386,15 @@ def create_superadmin(request):
     )
 
 
+@extend_schema(
+    tags=[TAG], summary="Listar todos los usuarios (requiere rol superadmin)",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    responses={
+        200: _envelope(UserPublicSerializer(many=True), "UserList"),
+        401: _err("Falta header Authorization: Token <token>"),
+        403: _err("Requiere rol superadmin"),
+    },
+)
 @api_view(["GET"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole, IsSuperadminRole])
@@ -255,6 +403,18 @@ def list_users(request):
     return Response({"status": status.HTTP_200_OK, "message": "usuarios", "data": items})
 
 
+@extend_schema(
+    tags=[TAG], summary="Asignar rol a un usuario (requiere rol superadmin)",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    request=RoleAssignSerializer,
+    examples=[OpenApiExample("Asignar admin", value={"role": "admin"}, request_only=True)],
+    responses={
+        200: _envelope(name="RoleAssigned"),
+        401: _err("Falta header Authorization: Token <token>"),
+        403: _err("Requiere rol superadmin"),
+        404: _err("Usuario no encontrado (o el rol especificado no existe)"),
+    },
+)
 @api_view(["PUT"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole, IsSuperadminRole])
@@ -271,6 +431,24 @@ def assign_user_role(request, user_id: int):
     return Response({"status": status.HTTP_200_OK, "message": "rol asignado", "data": None})
 
 
+@extend_schema_view(
+    get=extend_schema(
+        tags=[TAG], summary="Detalle de un usuario (público)",
+        responses={200: _envelope(_USER_PUBLIC, "UserDetail"), 404: _err("Usuario no encontrado")},
+    ),
+    put=extend_schema(
+        tags=[TAG], summary="Actualizar (parcial) un usuario (requiere rol admin/superadmin)",
+        description=_TOKEN_NOTE, auth=["TokenAuth"],
+        request=UserUpdateSerializer,
+        responses={
+            200: _envelope(name="UserUpdated"),
+            400: _err("Nada para actualizar (o datos duplicados)"),
+            401: _err("Falta header Authorization: Token <token>"),
+            403: _err("Requiere rol admin"),
+            404: _err("Usuario o asociación no encontrados"),
+        },
+    ),
+)
 class UserDetailView(APIView):
     """GET is public, PUT requires admin."""
 
@@ -313,6 +491,18 @@ class UserDetailView(APIView):
         return Response({"status": status.HTTP_200_OK, "message": "usuario actualizado", "data": None})
 
 
+@extend_schema(
+    tags=[TAG], summary="Crear usuario ya con rol asignado (requiere rol admin/superadmin)",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    request=AdminUserCreateSerializer,
+    responses={
+        201: OpenApiResponse(response=_envelope(name="AdminUserCreated")),
+        400: _err("Teléfono o identificación ya registrados"),
+        401: _err("Falta header Authorization: Token <token>"),
+        403: _err("Requiere rol admin"),
+        404: _err("Asociación no encontrada"),
+    },
+)
 @api_view(["POST"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole, IsAdminRole])
@@ -340,6 +530,24 @@ def admin_create_user(request):
     )
 
 
+@extend_schema(
+    tags=[TAG], summary="Login (teléfono o identificación + contraseña)",
+    description="Devuelve un token opaco de sesión — enviar en `Authorization: Token <token>` en los endpoints protegidos. No expira por tiempo; se invalida al pedir reset de contraseña.",
+    request=UserLoginSerializer,
+    responses={
+        200: OpenApiResponse(
+            response=_envelope(inline_serializer("LoginData", {
+                "token": serializers.CharField(), "role": serializers.CharField(),
+                "name": serializers.CharField(), "email": serializers.CharField(allow_null=True),
+            }), "LoginOk"),
+            examples=[OpenApiExample("OK", value={
+                "status": 200, "message": "login ok",
+                "data": {"token": "b3f1...(uuid4)", "role": "user", "name": "Juan Pérez", "email": "juan@example.com"},
+            })],
+        ),
+        401: _err("Credenciales inválidas"),
+    },
+)
 @api_view(["POST"])
 def login(request):
     serializer = UserLoginSerializer(data=request.data)
@@ -365,6 +573,21 @@ def login(request):
     )
 
 
+@extend_schema(
+    tags=[TAG], summary="Solicitar código OTP para restablecer contraseña",
+    description=(
+        "Siempre responde 200 con el mismo mensaje genérico exista o no el email (evita enumerar "
+        "usuarios). El OTP llega por correo, expira en 10 minutos, y hay un cooldown de 60s entre "
+        "solicitudes para el mismo usuario."
+    ),
+    request=PasswordResetRequestSerializer,
+    responses={
+        200: OpenApiResponse(response=_envelope(name="ForgotPasswordOk"), examples=[OpenApiExample(
+            "OK", value={"status": 200, "message": "Si el correo está registrado, se envió un código de verificación", "data": None})]),
+        429: _err("Espera un momento antes de solicitar otro código"),
+        503: _err("No se pudo enviar el correo, intenta más tarde"),
+    },
+)
 @api_view(["POST"])
 def forgot_password(request):
     serializer = PasswordResetRequestSerializer(data=request.data)
@@ -396,6 +619,15 @@ def forgot_password(request):
     return generic_response
 
 
+@extend_schema(
+    tags=[TAG], summary="Confirmar OTP y establecer nueva contraseña",
+    description="Al aplicarse, invalida la sesión actual (`auth_token` se pone en null) — hay que volver a hacer login.",
+    request=PasswordResetConfirmSerializer,
+    responses={
+        200: OpenApiResponse(response=_envelope(name="ResetPasswordOk")),
+        400: _err("Código inválido o expirado"),
+    },
+)
 @api_view(["POST"])
 def reset_password(request):
     serializer = PasswordResetConfirmSerializer(data=request.data)
@@ -423,6 +655,21 @@ def reset_password(request):
 # Roles
 # ---------------------------------------------------------------------------
 
+@extend_schema(
+    methods=["GET"], tags=[TAG], summary="Listar roles (requiere rol superadmin)",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    responses={200: _envelope(inline_serializer("Role", _role_item_fields(), many=True), "RoleList"), 401: _err(), 403: _err("Requiere rol superadmin")},
+)
+@extend_schema(
+    methods=["POST"], tags=[TAG], summary="Crear rol (requiere rol superadmin)",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    request=RoleCreateSerializer,
+    responses={
+        201: OpenApiResponse(response=_envelope(name="RoleCreated")),
+        400: _err("Ya existe un rol con ese nombre"),
+        401: _err(), 403: _err("Requiere rol superadmin"),
+    },
+)
 @api_view(["GET", "POST"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole, IsSuperadminRole])
@@ -442,6 +689,26 @@ def roles_list_create(request):
     return Response({"status": status.HTTP_200_OK, "message": "roles", "data": items})
 
 
+@extend_schema(
+    methods=["PUT"], tags=[TAG], summary="Actualizar (parcial) un rol (requiere rol superadmin)",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    request=RoleUpdateSerializer,
+    responses={
+        200: _envelope(name="RoleUpdated"),
+        400: _err("Ya existe un rol con ese nombre (o nada para actualizar)"),
+        401: _err(), 403: _err("Requiere rol superadmin"), 404: _err("Rol no encontrado"),
+    },
+)
+@extend_schema(
+    methods=["DELETE"], tags=[TAG], summary="Eliminar un rol (requiere rol superadmin)",
+    description=_TOKEN_NOTE + " No se puede eliminar si hay usuarios con ese rol asignado.",
+    auth=["TokenAuth"],
+    responses={
+        200: _envelope(name="RoleDeleted"),
+        400: _err("No se puede eliminar: hay usuarios con este rol asignado"),
+        401: _err(), 403: _err("Requiere rol superadmin"), 404: _err("Rol no encontrado"),
+    },
+)
 @api_view(["PUT", "DELETE"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole, IsSuperadminRole])
@@ -475,6 +742,12 @@ def role_detail(request, role_id: int):
 # Logbooks
 # ---------------------------------------------------------------------------
 
+@extend_schema(
+    tags=[TAG], summary="Crear entrada de bitácora (del usuario autenticado)",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    request=LogbookCreateSerializer,
+    responses={201: OpenApiResponse(response=_envelope(name="LogbookCreated")), 401: _err(), 403: _err("Tu cuenta aún no tiene un rol asignado.")},
+)
 @api_view(["POST"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole])
@@ -495,6 +768,25 @@ def create_logbook(request):
     )
 
 
+@extend_schema(
+    methods=["GET"], tags=[TAG], summary="Detalle de una bitácora propia",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    responses={200: _envelope(_LOGBOOK_ITEM, "LogbookDetail"), 401: _err(), 403: _err("No autorizado para esta bitácora"), 404: _err("Bitácora no encontrada")},
+)
+@extend_schema(
+    methods=["PUT"], tags=[TAG], summary="Actualizar (parcial) una bitácora propia",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    request=LogbookUpdateSerializer,
+    responses={
+        200: _envelope(name="LogbookUpdated"), 400: _err("Nada para actualizar"),
+        401: _err(), 403: _err("No autorizado para esta bitácora"), 404: _err("Bitácora no encontrada"),
+    },
+)
+@extend_schema(
+    methods=["DELETE"], tags=[TAG], summary="Eliminar una bitácora propia",
+    description=_TOKEN_NOTE, auth=["TokenAuth"],
+    responses={200: _envelope(name="LogbookDeleted"), 401: _err(), 403: _err("No autorizado para esta bitácora"), 404: _err("Bitácora no encontrada")},
+)
 @api_view(["GET", "PUT", "DELETE"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole])
@@ -524,6 +816,20 @@ def logbook_detail(request, logbook_id: int):
     return Response({"status": status.HTTP_200_OK, "message": "bitácora actualizada", "data": None})
 
 
+@extend_schema(
+    tags=[TAG], summary="Listar bitácoras propias, con filtros y paginación",
+    description=_TOKEN_NOTE + " `user_id` (si viene) debe ser el propio usuario — cualquier otro da 403.",
+    auth=["TokenAuth"],
+    parameters=[
+        OpenApiParameter("start_date", str, OpenApiParameter.QUERY, description="activity_date >= (YYYY-MM-DD)."),
+        OpenApiParameter("end_date", str, OpenApiParameter.QUERY, description="activity_date <= (YYYY-MM-DD)."),
+        OpenApiParameter("user_id", int, OpenApiParameter.QUERY, description="Debe coincidir con el usuario autenticado."),
+        OpenApiParameter("association_id", int, OpenApiParameter.QUERY),
+        OpenApiParameter("page", int, OpenApiParameter.QUERY, default=1),
+        OpenApiParameter("page_size", int, OpenApiParameter.QUERY, default=50),
+    ],
+    responses={200: _envelope(LogbookItemSerializer(many=True), "LogbookList"), 401: _err(), 403: _err("No autorizado para este usuario")},
+)
 @api_view(["GET"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole])
@@ -557,6 +863,36 @@ def list_my_logbooks(request):
 # Chat (Gemini)
 # ---------------------------------------------------------------------------
 
+@extend_schema(
+    tags=[TAG], summary="Chat con el asistente (Gemini) — puede crear bitácoras automáticamente",
+    description=(
+        _TOKEN_NOTE + " El historial es por `session_id` (si se omite, se genera uno nuevo — "
+        "guárdalo para continuar la misma conversación). Si el modelo detecta una intención "
+        "clara de registrar una bitácora, la crea y la devuelve en `logbook_created`; si no, "
+        "viene en `null`."
+    ),
+    auth=["TokenAuth"],
+    request=ChatRequestSerializer,
+    responses={
+        200: OpenApiResponse(
+            response=inline_serializer("ChatResponse", {
+                "reply": serializers.CharField(),
+                "session_id": serializers.CharField(),
+                "logbook_created": inline_serializer("ChatLogbookCreated", {
+                    "id": serializers.IntegerField(), "title": serializers.CharField(),
+                    "description": serializers.CharField(), "activity_date": serializers.CharField(),
+                    "association_id": serializers.IntegerField(allow_null=True),
+                    "association_name": serializers.CharField(allow_null=True),
+                }, allow_null=True),
+            }),
+            examples=[OpenApiExample("Sin bitácora", value={
+                "reply": "¡Listo! ¿En qué más te ayudo?", "session_id": "b3f1...(uuid4)", "logbook_created": None,
+            })],
+        ),
+        401: _err(), 403: _err("Tu cuenta aún no tiene un rol asignado."),
+        503: _err("GEMINI_API_KEY no configurada en el servidor"),
+    },
+)
 @api_view(["POST"])
 @authentication_classes([TokenHeaderAuthentication])
 @permission_classes([IsAuthenticatedWithRole])
@@ -631,6 +967,32 @@ def chat_with_assistant(request):
 # WhatsApp webhook (Meta Business API)
 # ---------------------------------------------------------------------------
 
+@extend_schema(
+    methods=["GET"], tags=[TAG],
+    summary="Verificación del webhook (Meta la llama al configurarlo, no un cliente humano)",
+    description="Estándar de Meta: si `hub.verify_token` coincide con `WHATSAPP_VERIFY_TOKEN`, hace eco de `hub.challenge` en texto plano.",
+    parameters=[
+        OpenApiParameter("hub.mode", str, OpenApiParameter.QUERY, required=True, enum=["subscribe"]),
+        OpenApiParameter("hub.verify_token", str, OpenApiParameter.QUERY, required=True),
+        OpenApiParameter("hub.challenge", str, OpenApiParameter.QUERY, required=True),
+    ],
+    responses={
+        200: OpenApiResponse(description="Texto plano (content-type text/plain): el valor de hub.challenge, hecho eco tal cual."),
+        403: _err("Verificación fallida"),
+    },
+)
+@extend_schema(
+    methods=["POST"], tags=[TAG],
+    summary="Recepción de mensajes (Meta llama esto, no un cliente humano)",
+    description=(
+        "Body = payload crudo de Meta Business API. Responde `{\"status\": \"ok\"}` (o \"ignored\" si "
+        "falta config/no aplica) casi siempre con 200 — Meta reintenta con cualquier otra cosa, así "
+        "que los errores de negocio (usuario no encontrado, etc.) se resuelven mandando un mensaje "
+        "de WhatsApp de vuelta, no con un código HTTP de error."
+    ),
+    request=inline_serializer("WhatsAppWebhookPayload", {"raw": serializers.JSONField(help_text="Estructura estándar de Meta Business API — entry[].changes[].value.messages[]...")}),
+    responses={200: inline_serializer("WhatsAppAck", {"status": serializers.ChoiceField(choices=["ok", "ignored"])})},
+)
 @api_view(["GET", "POST"])
 def whatsapp_webhook(request):
     if request.method == "GET":
