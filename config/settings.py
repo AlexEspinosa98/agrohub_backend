@@ -152,6 +152,9 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
+    # @latest se rompio en produccion (swagger-ui-bundle.js: 'Z.first(...).isEmpty is not a
+    # function', crashea CADA operacion) - fijar una version estable conocida, igual que aluna.
+    "SWAGGER_UI_DIST": "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14",
 }
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20MB, for survey photo uploads

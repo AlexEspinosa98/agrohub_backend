@@ -217,8 +217,7 @@ _LOGBOOK_ITEM = LogbookItemSerializer()
     ),
     post=extend_schema(
         tags=[TAG], summary="Crear asociación (requiere rol admin/superadmin)",
-        description=_TOKEN_NOTE, auth=["TokenAuth"],
-        request=AssociationCreateSerializer,
+        description=_TOKEN_NOTE,        request=AssociationCreateSerializer,
         responses={
             201: OpenApiResponse(response=_envelope(name="AssociationCreated"), examples=[
                 OpenApiExample("OK", value={"status": 201, "message": "asociación creada", "data": None})]),
@@ -259,8 +258,7 @@ class AssociationListCreateView(APIView):
     ),
     put=extend_schema(
         tags=[TAG], summary="Actualizar (parcial) una asociación (requiere rol admin/superadmin)",
-        description=_TOKEN_NOTE, auth=["TokenAuth"],
-        request=AssociationUpdateSerializer,
+        description=_TOKEN_NOTE,        request=AssociationUpdateSerializer,
         responses={
             200: _envelope(name="AssociationUpdated"),
             400: _err("Nada para actualizar"),
@@ -388,8 +386,7 @@ def create_superadmin(request):
 
 @extend_schema(
     tags=[TAG], summary="Listar todos los usuarios (requiere rol superadmin)",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    responses={
+    description=_TOKEN_NOTE,    responses={
         200: _envelope(UserPublicSerializer(many=True), "UserList"),
         401: _err("Falta header Authorization: Token <token>"),
         403: _err("Requiere rol superadmin"),
@@ -405,8 +402,7 @@ def list_users(request):
 
 @extend_schema(
     tags=[TAG], summary="Asignar rol a un usuario (requiere rol superadmin)",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    request=RoleAssignSerializer,
+    description=_TOKEN_NOTE,    request=RoleAssignSerializer,
     examples=[OpenApiExample("Asignar admin", value={"role": "admin"}, request_only=True)],
     responses={
         200: _envelope(name="RoleAssigned"),
@@ -438,8 +434,7 @@ def assign_user_role(request, user_id: int):
     ),
     put=extend_schema(
         tags=[TAG], summary="Actualizar (parcial) un usuario (requiere rol admin/superadmin)",
-        description=_TOKEN_NOTE, auth=["TokenAuth"],
-        request=UserUpdateSerializer,
+        description=_TOKEN_NOTE,        request=UserUpdateSerializer,
         responses={
             200: _envelope(name="UserUpdated"),
             400: _err("Nada para actualizar (o datos duplicados)"),
@@ -493,8 +488,7 @@ class UserDetailView(APIView):
 
 @extend_schema(
     tags=[TAG], summary="Crear usuario ya con rol asignado (requiere rol admin/superadmin)",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    request=AdminUserCreateSerializer,
+    description=_TOKEN_NOTE,    request=AdminUserCreateSerializer,
     responses={
         201: OpenApiResponse(response=_envelope(name="AdminUserCreated")),
         400: _err("Teléfono o identificación ya registrados"),
@@ -657,13 +651,11 @@ def reset_password(request):
 
 @extend_schema(
     methods=["GET"], tags=[TAG], summary="Listar roles (requiere rol superadmin)",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    responses={200: _envelope(inline_serializer("Role", _role_item_fields(), many=True), "RoleList"), 401: _err(), 403: _err("Requiere rol superadmin")},
+    description=_TOKEN_NOTE,    responses={200: _envelope(inline_serializer("Role", _role_item_fields(), many=True), "RoleList"), 401: _err(), 403: _err("Requiere rol superadmin")},
 )
 @extend_schema(
     methods=["POST"], tags=[TAG], summary="Crear rol (requiere rol superadmin)",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    request=RoleCreateSerializer,
+    description=_TOKEN_NOTE,    request=RoleCreateSerializer,
     responses={
         201: OpenApiResponse(response=_envelope(name="RoleCreated")),
         400: _err("Ya existe un rol con ese nombre"),
@@ -691,8 +683,7 @@ def roles_list_create(request):
 
 @extend_schema(
     methods=["PUT"], tags=[TAG], summary="Actualizar (parcial) un rol (requiere rol superadmin)",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    request=RoleUpdateSerializer,
+    description=_TOKEN_NOTE,    request=RoleUpdateSerializer,
     responses={
         200: _envelope(name="RoleUpdated"),
         400: _err("Ya existe un rol con ese nombre (o nada para actualizar)"),
@@ -702,7 +693,6 @@ def roles_list_create(request):
 @extend_schema(
     methods=["DELETE"], tags=[TAG], summary="Eliminar un rol (requiere rol superadmin)",
     description=_TOKEN_NOTE + " No se puede eliminar si hay usuarios con ese rol asignado.",
-    auth=["TokenAuth"],
     responses={
         200: _envelope(name="RoleDeleted"),
         400: _err("No se puede eliminar: hay usuarios con este rol asignado"),
@@ -744,8 +734,7 @@ def role_detail(request, role_id: int):
 
 @extend_schema(
     tags=[TAG], summary="Crear entrada de bitácora (del usuario autenticado)",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    request=LogbookCreateSerializer,
+    description=_TOKEN_NOTE,    request=LogbookCreateSerializer,
     responses={201: OpenApiResponse(response=_envelope(name="LogbookCreated")), 401: _err(), 403: _err("Tu cuenta aún no tiene un rol asignado.")},
 )
 @api_view(["POST"])
@@ -770,13 +759,11 @@ def create_logbook(request):
 
 @extend_schema(
     methods=["GET"], tags=[TAG], summary="Detalle de una bitácora propia",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    responses={200: _envelope(_LOGBOOK_ITEM, "LogbookDetail"), 401: _err(), 403: _err("No autorizado para esta bitácora"), 404: _err("Bitácora no encontrada")},
+    description=_TOKEN_NOTE,    responses={200: _envelope(_LOGBOOK_ITEM, "LogbookDetail"), 401: _err(), 403: _err("No autorizado para esta bitácora"), 404: _err("Bitácora no encontrada")},
 )
 @extend_schema(
     methods=["PUT"], tags=[TAG], summary="Actualizar (parcial) una bitácora propia",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    request=LogbookUpdateSerializer,
+    description=_TOKEN_NOTE,    request=LogbookUpdateSerializer,
     responses={
         200: _envelope(name="LogbookUpdated"), 400: _err("Nada para actualizar"),
         401: _err(), 403: _err("No autorizado para esta bitácora"), 404: _err("Bitácora no encontrada"),
@@ -784,8 +771,7 @@ def create_logbook(request):
 )
 @extend_schema(
     methods=["DELETE"], tags=[TAG], summary="Eliminar una bitácora propia",
-    description=_TOKEN_NOTE, auth=["TokenAuth"],
-    responses={200: _envelope(name="LogbookDeleted"), 401: _err(), 403: _err("No autorizado para esta bitácora"), 404: _err("Bitácora no encontrada")},
+    description=_TOKEN_NOTE,    responses={200: _envelope(name="LogbookDeleted"), 401: _err(), 403: _err("No autorizado para esta bitácora"), 404: _err("Bitácora no encontrada")},
 )
 @api_view(["GET", "PUT", "DELETE"])
 @authentication_classes([TokenHeaderAuthentication])
@@ -819,7 +805,6 @@ def logbook_detail(request, logbook_id: int):
 @extend_schema(
     tags=[TAG], summary="Listar bitácoras propias, con filtros y paginación",
     description=_TOKEN_NOTE + " `user_id` (si viene) debe ser el propio usuario — cualquier otro da 403.",
-    auth=["TokenAuth"],
     parameters=[
         OpenApiParameter("start_date", str, OpenApiParameter.QUERY, description="activity_date >= (YYYY-MM-DD)."),
         OpenApiParameter("end_date", str, OpenApiParameter.QUERY, description="activity_date <= (YYYY-MM-DD)."),
@@ -871,7 +856,6 @@ def list_my_logbooks(request):
         "clara de registrar una bitácora, la crea y la devuelve en `logbook_created`; si no, "
         "viene en `null`."
     ),
-    auth=["TokenAuth"],
     request=ChatRequestSerializer,
     responses={
         200: OpenApiResponse(
@@ -970,12 +954,13 @@ def chat_with_assistant(request):
 @extend_schema(
     methods=["GET"], tags=[TAG],
     summary="Verificación del webhook (Meta la llama al configurarlo, no un cliente humano)",
-    description="Estándar de Meta: si `hub.verify_token` coincide con `WHATSAPP_VERIFY_TOKEN`, hace eco de `hub.challenge` en texto plano.",
-    parameters=[
-        OpenApiParameter("hub.mode", str, OpenApiParameter.QUERY, required=True, enum=["subscribe"]),
-        OpenApiParameter("hub.verify_token", str, OpenApiParameter.QUERY, required=True),
-        OpenApiParameter("hub.challenge", str, OpenApiParameter.QUERY, required=True),
-    ],
+    description=(
+        "Estándar de Meta: si `hub.verify_token` coincide con `WHATSAPP_VERIFY_TOKEN`, hace eco "
+        "de `hub.challenge` en texto plano. Query params (nombres con punto — Swagger UI no los "
+        "renderiza bien como parámetros formales, van solo aquí en la descripción): "
+        "`hub.mode=subscribe` (fijo), `hub.verify_token` (el token configurado), "
+        "`hub.challenge` (string arbitrario que Meta espera de vuelta)."
+    ),
     responses={
         200: OpenApiResponse(description="Texto plano (content-type text/plain): el valor de hub.challenge, hecho eco tal cual."),
         403: _err("Verificación fallida"),

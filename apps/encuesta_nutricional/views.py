@@ -199,7 +199,6 @@ def dashboard_municipios(request):
     description=_TOKEN_AUTH_NOTE,
     parameters=[OpenApiParameter("municipio", str, OpenApiParameter.QUERY)],
     responses={200: OpenApiResponse(response=_envelope(serializers.JSONField(help_text="array de {vereda_comunidad, total_encuestas, ...métricas agregadas}"), "resumen veredas")), 401: OpenApiResponse(description="Token ausente/inválido.")},
-    auth=["TokenAuth"],
 )
 @api_view(["GET"])
 @authentication_classes([TokenHeaderAuthentication])
@@ -218,7 +217,6 @@ def dashboard_veredas(request):
         401: OpenApiResponse(description="Token ausente/inválido."),
         404: OpenApiResponse(description="No hay encuestas activas para ese municipio."),
     },
-    auth=["TokenAuth"],
 )
 @api_view(["GET"])
 @authentication_classes([TokenHeaderAuthentication])
@@ -241,7 +239,6 @@ def dashboard_detalle_municipio(request, municipio: str):
         401: OpenApiResponse(description="Token ausente/inválido."),
         404: OpenApiResponse(description="No hay encuestas activas para exportar."),
     },
-    auth=["TokenAuth"],
 )
 @api_view(["GET"])
 @authentication_classes([TokenHeaderAuthentication])
