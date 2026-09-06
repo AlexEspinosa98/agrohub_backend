@@ -51,7 +51,6 @@ class User(models.Model):
         related_name="users",
     )
     role = models.CharField(max_length=50, null=True, blank=True, default=None)
-    auth_token = models.CharField(max_length=255, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     reset_otp_hash = models.CharField(max_length=255, null=True, blank=True)
     reset_otp_expires_at = models.DateTimeField(null=True, blank=True)
@@ -67,6 +66,31 @@ class User(models.Model):
     @property
     def is_authenticated(self):
         return True
+
+
+class Session(models.Model):
+    """One active token per (user, platform).
+
+    Replaces the old single `User.auth_token` column so the same account can
+    hold one token for the app and a separate one for the web at the same
+    time, instead of the newest login kicking out the other. `platform` is a
+    loose label ("app"/"web"/null), not enforced — logging in without a
+    platform just adds another concurrent session rather than replacing one.
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, db_column="user_id", related_name="sessions"
+    )
+    token = models.CharField(max_length=255, unique=True)
+    platform = models.CharField(max_length=20, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "sessions"
+
+    def __str__(self):
+        return f"{self.user_id}:{self.platform or 'unknown'}"
 
 
 class Logbook(models.Model):

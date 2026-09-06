@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "apps.data_characterization",
     "apps.hub_cgsm",
     "apps.encuesta_nutricional",
+    "apps.asistencia_eventos",
 ]
 
 MIDDLEWARE = [

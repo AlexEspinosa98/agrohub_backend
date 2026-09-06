@@ -11,7 +11,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.exceptions import NotFound, ParseError, PermissionDenied, Throttled
+from rest_framework.exceptions import NotAuthenticated, NotFound, ParseError, PermissionDenied, Throttled
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,7 +24,7 @@ from apps.user_activity.chat_service import (
     parse_logbook_tag,
 )
 from apps.user_activity.email_service import send_otp_email
-from apps.user_activity.models import Association, Conversation, Logbook, Role, User
+from apps.user_activity.models import Association, Conversation, Logbook, Role, Session, User
 from apps.user_activity.permissions import (
     HasSuperadminServerToken,
     IsAdminRole,
@@ -349,8 +349,10 @@ def login(request):
     if not user or not verify_password(data["password"], user.password_hash):
         return Response({"detail": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
     token = str(uuid.uuid4())
-    user.auth_token = token
-    user.save(update_fields=["auth_token"])
+    platform = data.get("platform")
+    if platform:
+        Session.objects.filter(user=user, platform=platform).delete()
+    Session.objects.create(user=user, token=token, platform=platform)
     return Response(
         {
             "status": status.HTTP_200_OK,
@@ -363,6 +365,15 @@ def login(request):
             },
         }
     )
+
+
+@api_view(["POST"])
+@authentication_classes([TokenHeaderAuthentication])
+def logout(request):
+    if not request.user.is_authenticated:
+        raise NotAuthenticated("Falta header Authorization: Token <token>")
+    Session.objects.filter(token=request.auth).delete()
+    return Response({"status": status.HTTP_200_OK, "message": "sesión cerrada", "data": None})
 
 
 @api_view(["POST"])
@@ -414,8 +425,8 @@ def reset_password(request):
     user.password_hash = hash_password(data["new_password"])
     user.reset_otp_hash = None
     user.reset_otp_expires_at = None
-    user.auth_token = None
-    user.save(update_fields=["password_hash", "reset_otp_hash", "reset_otp_expires_at", "auth_token"])
+    user.save(update_fields=["password_hash", "reset_otp_hash", "reset_otp_expires_at"])
+    Session.objects.filter(user=user).delete()
     return Response({"status": status.HTTP_200_OK, "message": "contraseña actualizada", "data": None})
 
 

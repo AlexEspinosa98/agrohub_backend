@@ -50,6 +50,7 @@ class UserUpdateSerializer(serializers.Serializer):
 class UserLoginSerializer(serializers.Serializer):
     phone_or_identification = serializers.CharField()
     password = serializers.CharField()
+    platform = serializers.ChoiceField(choices=["app", "web"], required=False, allow_null=True)
 
 
 class PasswordResetRequestSerializer(serializers.Serializer):

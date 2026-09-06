@@ -11,3 +11,5 @@ modelo_guardado/*requirements.txt.bak
 /images
 staticfiles/
 gunicorn-*.log
+backups/
+media/

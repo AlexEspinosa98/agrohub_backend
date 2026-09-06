@@ -1,7 +1,8 @@
+from django.utils import timezone
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
-from apps.user_activity.models import User
+from apps.user_activity.models import Session
 
 
 class AnonymousUser:
@@ -14,11 +15,13 @@ class AnonymousUser:
 
 
 class TokenHeaderAuthentication(BaseAuthentication):
-    """`Authorization: Token <token>` — the same opaque single-session token
-    scheme the FastAPI backend used (not DRF's built-in TokenAuthentication
-    app/table). Malformed/missing headers are left for permission classes to
-    reject so the 401/403 split matches the original behavior; an
-    unrecognized token fails fast here with 401."""
+    """`Authorization: Token <token>` — the same opaque token scheme the
+    FastAPI backend used (not DRF's built-in TokenAuthentication app/table).
+    Tokens live in the `Session` table (one row per user+platform), so the
+    same account can hold a separate app token and web token at once.
+    Malformed/missing headers are left for permission classes to reject so
+    the 401/403 split matches the original behavior; an unrecognized token
+    fails fast here with 401."""
 
     keyword = "token"
 
@@ -29,10 +32,11 @@ class TokenHeaderAuthentication(BaseAuthentication):
         token = auth_header.split(" ", 1)[1].strip()
         if not token:
             return None
-        user = User.objects.filter(auth_token=token).first()
-        if not user:
+        session = Session.objects.select_related("user").filter(token=token).first()
+        if not session:
             raise AuthenticationFailed("Token inválido")
-        return (user, token)
+        Session.objects.filter(pk=session.pk).update(last_used_at=timezone.now())
+        return (session.user, token)
 
     def authenticate_header(self, request):
         return "Token"

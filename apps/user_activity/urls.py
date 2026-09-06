@@ -14,6 +14,7 @@ urlpatterns = [
     path("users/admin-create", views.admin_create_user, name="admin_create_user"),
     path("users/<int:user_id>", views.UserDetailView.as_view(), name="user_detail"),
     path("users/login", views.login, name="login"),
+    path("users/logout", views.logout, name="logout"),
     path("users/forgot-password", views.forgot_password, name="forgot_password"),
     path("users/reset-password", views.reset_password, name="reset_password"),
     path("logbooks", views.create_logbook, name="create_logbook"),

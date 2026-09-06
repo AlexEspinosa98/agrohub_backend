@@ -19,4 +19,5 @@ urlpatterns = [
     path("hub-cgsm/", include("apps.hub_cgsm.urls")),
     path("user-activity/", include("apps.user_activity.urls")),
     path("encuesta-nutricional/", include("apps.encuesta_nutricional.urls")),
+    path("asistencia-eventos/", include("apps.asistencia_eventos.urls")),
 ]
