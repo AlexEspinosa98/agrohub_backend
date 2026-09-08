@@ -13,3 +13,4 @@ staticfiles/
 gunicorn-*.log
 backups/
 media/
+credenciales_gateways.json

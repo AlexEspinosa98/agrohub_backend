@@ -2,6 +2,14 @@ import json
 import uuid
 
 from django.core.files.storage import default_storage
+from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
+from rest_framework import serializers
 from rest_framework.decorators import api_view, parser_classes
 from rest_framework.exceptions import NotFound, ParseError, ValidationError
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -56,6 +64,51 @@ def _save_upload(upload_file, subfolder: str) -> str:
     return default_storage.save(path, upload_file)
 
 
+@extend_schema(
+    methods=["GET"],
+    tags=["hub-cgsm"],
+    summary="Listar encuestas HUB CGSM de un tipo (actores/faena/acopio), con filtros y paginación",
+    description="A diferencia de data-characterization, aquí `surveyType` es obligatorio — sin él devuelve `[]`.",
+    parameters=[
+        OpenApiParameter(
+            "surveyType", str, OpenApiParameter.QUERY, required=True,
+            description="También acepta los nombres Pydantic viejos como alias (EncuestaActores, EncuestaFaena, EncuestaPuntoAcopio, EncuestaMonitoreoAmbiental).",
+            enum=["actores", "faena", "acopio", "ambiental"],
+        ),
+        OpenApiParameter("page", int, OpenApiParameter.QUERY, default=1),
+        OpenApiParameter("page_size", int, OpenApiParameter.QUERY, default=10),
+        OpenApiParameter("email", str, OpenApiParameter.QUERY, description="Filtra por email exacto."),
+        OpenApiParameter("startDate", str, OpenApiParameter.QUERY, description="fecha_registro >= este valor (YYYY-MM-DD)."),
+        OpenApiParameter("endDate", str, OpenApiParameter.QUERY, description="fecha_registro <= este valor (YYYY-MM-DD)."),
+        OpenApiParameter("id", int, OpenApiParameter.QUERY, description="Filtra por id exacto."),
+    ],
+    responses={200: OpenApiResponse(description="Lista de encuestas del tipo pedido — campos según el serializer de ese tipo.")},
+)
+@extend_schema(
+    methods=["POST"],
+    tags=["hub-cgsm"],
+    summary="[Legacy] valida y devuelve el body tal cual — no persiste nada",
+    description=(
+        "Port directo del endpoint FastAPI original: solo valida que estén los 9 campos "
+        "requeridos y hace eco del body. Las 3 encuestas reales de HUB CGSM se guardan con los "
+        "endpoints multipart de abajo (survey/actors, survey/faena, survey/punto-acopio)."
+    ),
+    request=inline_serializer("SurveyParametersCreate", {
+        "email": serializers.CharField(),
+        "date_aplication": serializers.CharField(),
+        "ph": serializers.FloatField(),
+        "salinity": serializers.FloatField(),
+        "dissolved_oxygen": serializers.FloatField(),
+        "conductivity": serializers.FloatField(),
+        "temperature": serializers.FloatField(),
+        "latitude": serializers.FloatField(),
+        "longitude": serializers.FloatField(),
+    }),
+    responses={
+        200: OpenApiResponse(description="Devuelve exactamente el body recibido."),
+        400: OpenApiResponse(description="Falta alguno de los 9 campos requeridos."),
+    },
+)
 @api_view(["GET", "POST"])
 def surveys_list_create(request):
     if request.method == "POST":
@@ -114,6 +167,16 @@ def _get_all_surveys(request):
     return Response([_instance_to_dict(obj) for obj in qs])
 
 
+@extend_schema(
+    tags=["hub-cgsm"],
+    summary="Actualizar (parcial) una encuesta HUB CGSM existente",
+    description="`type` en el body decide el esquema (acepta los alias Pydantic viejos también). Campos no incluidos no se tocan.",
+    request=EncuestaActorSerializer,  # forma base — el tipo real puede ser cualquiera de los 4, mismos campos que el serializer correspondiente
+    responses={
+        200: OpenApiResponse(description="Encuesta actualizada — devuelve el objeto completo."),
+        404: OpenApiResponse(description="No existe una encuesta con ese id, o el body no trajo ningún campo actualizable."),
+    },
+)
 @api_view(["PUT"])
 def update_survey(request, id: int):
     survey_type = _resolve_type(request.data.get("type"))
@@ -140,6 +203,31 @@ def update_survey(request, id: int):
     return Response(_instance_to_dict(instance))
 
 
+@extend_schema(
+    tags=["hub-cgsm"],
+    summary="Guardar encuesta de Actor (multipart/form-data, con 2 fotos)",
+    description=(
+        "`survey_json` es un string con el JSON serializado de EncuestaActorSerializer (no un "
+        "objeto anidado — el form-data solo transporta strings/archivos). Las 2 fotos son "
+        "obligatorias. `id_actor`/`id_activo` se autogeneran (UUID) si no vienen en el JSON."
+    ),
+    request={
+        "multipart/form-data": inline_serializer("ActorSurveyUpload", {
+            "survey_json": serializers.CharField(
+                help_text='JSON de EncuestaActorSerializer, ej: {"numero_identificacion":"123","nombre_codigo_activo":"Bote 1","autorizo_datos":true,"activos_bioseguridad":true, ...}',
+            ),
+            "fotografia_actor": serializers.FileField(),
+            "fotografia_activo": serializers.FileField(),
+        }),
+    },
+    responses={
+        201: OpenApiResponse(
+            response=inline_serializer("SavedMessage", {"message": serializers.CharField()}),
+            examples=[OpenApiExample("OK", value={"message": "Actor survey saved successfully"})],
+        ),
+        400: OpenApiResponse(description="survey_json inválido/faltante, fotos faltantes, o error de validación de EncuestaActorSerializer."),
+    },
+)
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
 def save_actor_survey(request):
@@ -166,6 +254,30 @@ def save_actor_survey(request):
     return Response({"message": "Actor survey saved successfully"}, status=201)
 
 
+@extend_schema(
+    tags=["hub-cgsm"],
+    summary="Guardar encuesta de Faena (multipart/form-data, con 2 fotos)",
+    description=(
+        "`survey_json` es un string con el JSON serializado de EncuestaFaenaSerializer. Las 2 "
+        "fotos (antes/después) son obligatorias. `id_faena` se autogenera (UUID) si no viene."
+    ),
+    request={
+        "multipart/form-data": inline_serializer("FaenaSurveyUpload", {
+            "survey_json": serializers.CharField(
+                help_text='JSON de EncuestaFaenaSerializer, ej: {"superficie_intervenida":1.5,"numero_personas":6,"horas_trabajadas":4,"biomasa_humeda_kg":120,"numero_sacos":8,"punto_acopio_asociado":"PA-01","oxigeno_disuelto_mgL":5.2,"turbidez_NTU":3.1,"salinidad_prom":12.4, ...}',
+            ),
+            "fotografia_antes": serializers.FileField(),
+            "fotografia_despues": serializers.FileField(),
+        }),
+    },
+    responses={
+        201: OpenApiResponse(
+            response=inline_serializer("SavedMessage2", {"message": serializers.CharField()}),
+            examples=[OpenApiExample("OK", value={"message": "Faena survey saved successfully"})],
+        ),
+        400: OpenApiResponse(description="survey_json inválido/faltante, fotos faltantes, o error de validación de EncuestaFaenaSerializer."),
+    },
+)
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
 def save_faena_survey(request):
@@ -191,6 +303,30 @@ def save_faena_survey(request):
     return Response({"message": "Faena survey saved successfully"}, status=201)
 
 
+@extend_schema(
+    tags=["hub-cgsm"],
+    summary="Guardar Punto de Acopio de biomasa (multipart/form-data, con 1 foto)",
+    description=(
+        "`survey_json` es un string con el JSON serializado de EncuestaPuntoAcopioSerializer. "
+        "La foto georreferenciada es obligatoria. Si `id_punto` viene en el JSON hace upsert "
+        "(update_or_create); si no viene, siempre crea uno nuevo."
+    ),
+    request={
+        "multipart/form-data": inline_serializer("PuntoAcopioSurveyUpload", {
+            "survey_json": serializers.CharField(
+                help_text='JSON de EncuestaPuntoAcopioSerializer, ej: {"nombre_referencia":"Muelle 2","tipo_punto":"fijo","ubicacion":"...", ...}',
+            ),
+            "fotografia_georreferenciada": serializers.FileField(),
+        }),
+    },
+    responses={
+        201: OpenApiResponse(
+            response=inline_serializer("SavedMessage3", {"message": serializers.CharField()}),
+            examples=[OpenApiExample("OK", value={"message": "Punto de Acopio survey saved successfully"})],
+        ),
+        400: OpenApiResponse(description="survey_json inválido/faltante, foto faltante, o error de validación de EncuestaPuntoAcopioSerializer."),
+    },
+)
 @api_view(["POST"])
 @parser_classes([MultiPartParser, FormParser])
 def save_punto_acopio_survey(request):

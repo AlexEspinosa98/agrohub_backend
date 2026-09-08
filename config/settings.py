@@ -10,6 +10,10 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "insecure-dev-key-change-in-producti
 DEBUG = os.getenv("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [h.strip() for h in os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",") if h.strip()]
 
+# Prefijo con el que nginx monta esta app (ej. /api/agrohub) — hace que Django
+# genere URLs (reverse(), admin, drf-spectacular) con el prefijo correcto.
+FORCE_SCRIPT_NAME = os.getenv("DJANGO_FORCE_SCRIPT_NAME") or None
+
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -19,11 +23,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "rest_framework",
     "corsheaders",
+    "drf_spectacular",
     "apps.user_activity",
     "apps.data_characterization",
     "apps.hub_cgsm",
     "apps.encuesta_nutricional",
     "apps.asistencia_eventos",
+    "apps.riego_iot",
 ]
 
 MIDDLEWARE = [
@@ -74,8 +80,22 @@ DATABASES = {
         "OPTIONS": {
             "charset": "utf8mb4",
         },
-    }
+    },
+    # apps.riego_iot (gateways de riego IoT) vive en Postgres, no MySQL — es la misma base
+    # 'agrohub_mqtt' que ya llena el daemon de ingesta del repo mqtt_agrohub (proceso Python
+    # aparte, corriendo 24/7 en este servidor, suscrito por MQTT a los gateways). Sus modelos son
+    # managed=False (ver apps/riego_iot/models.py) y config/db_routers.py enruta todo lo de esa
+    # app aquí — nunca se corre `migrate` sobre esta base, las tablas ya existen.
+    "mqtt": {
+        "ENGINE": "django.db.backends.postgresql",
+        "HOST": os.getenv("MQTT_DB_HOST", "localhost"),
+        "PORT": os.getenv("MQTT_DB_PORT", "5434"),
+        "NAME": os.getenv("MQTT_DB_NAME", "agrohub_mqtt"),
+        "USER": os.getenv("MQTT_DB_USER", "agrohub_mqtt"),
+        "PASSWORD": os.getenv("MQTT_DB_PASSWORD", ""),
+    },
 }
+DATABASE_ROUTERS = ["config.db_routers.RiegoIotRouter"]
 
 AUTH_PASSWORD_VALIDATORS = []
 
@@ -116,6 +136,26 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "config.exceptions.agrohub_exception_handler",
     "DEFAULT_PAGINATION_CLASS": None,
     "UNAUTHENTICATED_USER": "apps.user_activity.authentication.AnonymousUser",
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# ---------------------------------------------------------------------------
+# drf-spectacular — schema OpenAPI para /docs/. Varias vistas son @api_view planas (no
+# ViewSets/generics), así que el autodetect no siempre infiere bien: se van agregando
+# @extend_schema explícitos por vista para que el body/response queden completos.
+# ---------------------------------------------------------------------------
+SPECTACULAR_SETTINGS = {
+    "TITLE": "AgroHub API",
+    "DESCRIPTION": (
+        "API del backend AgroHub (Universidad del Magdalena): encuestas de caracterización, "
+        "HUB CGSM, actividad de usuarios/autenticación, encuesta nutricional y administración "
+        "de gateways de riego IoT."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    # @latest se rompio en produccion (swagger-ui-bundle.js: 'Z.first(...).isEmpty is not a
+    # function', crashea CADA operacion) - fijar una version estable conocida, igual que aluna.
+    "SWAGGER_UI_DIST": "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14",
 }
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20MB, for survey photo uploads
@@ -138,6 +178,15 @@ MAIL_FROM_NAME = os.getenv("MAIL_FROM_NAME", "AgroHub")
 
 ENABLE_TRANSCRIBE = os.getenv("ENABLE_TRANSCRIBE", "false").lower() == "true"
 WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "tiny")
+
+# ---------------------------------------------------------------------------
+# apps.riego_iot — administración de gateways AgroHub (riego IoT) y credenciales de Mosquitto.
+# Ver apps/riego_iot/mosquitto_admin.py y el README de mqtt_agrohub, sección "Permisos que
+# necesita" (grupo mosquitto-admin + regla de sudoers para "systemctl reload mosquitto").
+# ---------------------------------------------------------------------------
+RIEGO_IOT_API_KEY = os.getenv("RIEGO_IOT_API_KEY")
+RIEGO_IOT_MOSQUITTO_PASSWD_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_PASSWD_FILE", "/etc/mosquitto/passwd")
+RIEGO_IOT_MOSQUITTO_ACL_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_ACL_FILE", "/etc/mosquitto/acl.conf")
 
 LOGGING = {
     "version": 1,
