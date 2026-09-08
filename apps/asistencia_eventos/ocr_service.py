@@ -45,7 +45,13 @@ def _get_engine():
             from paddleocr import PaddleOCR
         except ImportError as exc:
             raise OcrUnavailable(detail="paddleocr no está instalado en este entorno") from exc
-        _OCR_ENGINE = PaddleOCR(lang="es")
+        # enable_mkldnn=False: con oneDNN (el default en CPU) el detector de texto revienta
+        # con "(Unimplemented) ConvertPirAttribute2RuntimeAttribute not support
+        # [pir::ArrayAttribute<pir::DoubleAttribute>]" — un bug de PaddlePaddle 3.x con su
+        # nuevo executor PIR sobre oneDNN, no algo de este código. Confirmado en el servidor
+        # (Ubuntu 22.04, CPU-only) que desactivar oneDNN evita el crash sin afectar la
+        # precisión; solo hace la inferencia un poco más lenta.
+        _OCR_ENGINE = PaddleOCR(lang="es", enable_mkldnn=False)
     return _OCR_ENGINE
 
 
