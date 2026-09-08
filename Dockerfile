@@ -7,9 +7,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # poppler-utils: PDF->image conversion for the asistencia_eventos OCR scan
-# endpoint (pdf2image shells out to pdftoppm).
+# endpoint (pdf2image shells out to pdftoppm). libgl1/libglib2.0-0/libsm6/
+# libxext6/libxrender1: opencv-contrib-python (pulled in by paddlex) is the
+# GUI-enabled build, not -headless, so `import cv2` needs these even though
+# nothing here ever opens a window — without them the first request fails
+# with "ImportError: libGL.so.1", and every request after that in the same
+# worker fails instead with "RuntimeError: PDX has already been initialized"
+# (paddlex's internal state gets marked initialized before the import blows
+# up, and that half-initialized state is never retried automatically).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends poppler-utils \
+    && apt-get install -y --no-install-recommends \
+        poppler-utils libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

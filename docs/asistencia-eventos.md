@@ -4,6 +4,29 @@ Módulo independiente (propio `apps/asistencia_eventos`, propias tablas) para di
 
 **Base URL:** `/asistencia-eventos/` — todos los endpoints requieren `Authorization: Token <token>` de un usuario con rol `admin` o `superadmin` (es la parte del flujo **web**, no la app de encuestas de campo).
 
+## Requisitos del sistema (fuera de requirements.txt)
+
+`pdf2image` y `paddleocr`/`paddlex` (vía `opencv-contrib-python`, que traen como dependencia
+transitiva) necesitan binarios/librerías del SO que `pip install` no instala solo. En un despliegue
+sin Docker (venv + gunicorn + systemd, como el de producción) hay que instalarlos aparte:
+
+```bash
+sudo apt-get install -y poppler-utils libgl1 libglib2.0-0 libsm6 libxext6 libxrender1
+```
+
+- `poppler-utils` — `pdftoppm`/`pdftocairo`, usados por `pdf2image` para convertir el PDF a imagen.
+- `libgl1`/`libglib2.0-0`/`libsm6`/`libxext6`/`libxrender1` — dependencias de `opencv-contrib-python`
+  (la variante con soporte de GUI que `paddlex` instala, no la `-headless`), aunque el servidor nunca
+  abre ninguna ventana. Sin `libgl1` el primer `import cv2` revienta con
+  `ImportError: libGL.so.1: cannot open shared object file` — y como `paddlex` ya alcanzó a marcar su
+  estado interno como inicializado antes de fallar, el **segundo** intento (mismo proceso gunicorn) ya
+  no repite ese error sino `RuntimeError: PDX has already been initialized` — dos síntomas distintos,
+  una sola causa. El fix es instalar las librerías y reiniciar el servicio (el estado corrupto vive en
+  memoria de cada worker, no se autocorrige sin reiniciar).
+
+El `Dockerfile` del repo ya instala estos paquetes junto con `poppler-utils` — ver ahí si necesitas la
+lista exacta para otra distro base.
+
 ## Por qué el flujo es en dos pasos
 
 El formato es manuscrito. Se probó primero con Tesseract (OCR clásico) y no reconoció ni un solo asistente sobre una hoja real — Tesseract está pensado para texto impreso. Se cambió a **PaddleOCR** (modelo PP-OCRv6, corre 100% local en CPU, sin llamadas a APIs externas — importante porque el servidor va a ser onpremise), que sobre la misma hoja sí reconoció 9 de 10 asistentes, con los números de documento exactos.
