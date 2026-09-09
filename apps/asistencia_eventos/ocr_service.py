@@ -351,11 +351,15 @@ def _extract_with_paddleocr(pages: list) -> dict:
 # "tipo_documento" key vanished from a real response, not just their values). So every
 # property is required here even though most may legitimately be null — "required" only
 # forces the *key* to exist, the "null" in each type/enum is what allows an unsure value.
+# tipo_documento is deliberately NOT asked of the model: the real form never has a separate
+# "tipo de documento" column (PaddleOCR always leaves it null too — see _parse_table), and
+# asking for it anyway once caused the model to shift every other value by one field trying
+# to fill it in (numero_documento ended up holding the phone number, tipo_documento the real
+# ID). It's filled in as null in _extract_with_llm instead, same as the PaddleOCR path.
 _ASISTENTE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "nombre": {"type": ["string", "null"]},
-        "tipo_documento": {"type": ["string", "null"]},
         "numero_documento": {"type": ["string", "null"]},
         "municipio": {"type": ["string", "null"]},
         "telefono": {"type": ["string", "null"]},
@@ -363,16 +367,7 @@ _ASISTENTE_JSON_SCHEMA = {
         "genero": {"enum": ["F", "M", "O", None]},
         "pertenencia_etnica": {"enum": ["ninguno", "indigena", "afro", "rom", "raizal", None]},
     },
-    "required": [
-        "nombre",
-        "tipo_documento",
-        "numero_documento",
-        "municipio",
-        "telefono",
-        "edad",
-        "genero",
-        "pertenencia_etnica",
-    ],
+    "required": ["nombre", "numero_documento", "municipio", "telefono", "edad", "genero", "pertenencia_etnica"],
 }
 
 _PAGINA_JSON_SCHEMA = {
@@ -396,8 +391,8 @@ Devuelve ÚNICAMENTE el JSON pedido, sin explicaciones ni markdown, con esta inf
 - tema, responsable, lugar, fecha, hora_inicio, hora_final: los datos del encabezado del evento. \
 Si esta página no trae encabezado (por ejemplo, es una página de continuación de la tabla), deja \
 esos campos en null.
-- asistentes: una fila por cada persona en la tabla, con nombre, tipo_documento, numero_documento, \
-municipio, telefono, edad, genero y pertenencia_etnica.
+- asistentes: una fila por cada persona en la tabla, con nombre, numero_documento, municipio, \
+telefono, edad, genero y pertenencia_etnica.
 
 Reglas importantes:
 1. Transcribe numero_documento y telefono dígito por dígito, exactamente como están escritos — \
@@ -461,7 +456,9 @@ def _extract_with_llm(pages: list) -> dict:
         for campo in ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final"):
             if not header.get(campo) and page_data.get(campo):
                 header[campo] = page_data[campo]
-        asistentes.extend(page_data.get("asistentes") or [])
+        for asistente in page_data.get("asistentes") or []:
+            asistente["tipo_documento"] = None
+            asistentes.append(asistente)
 
     return {
         "tema": header.get("tema"),
