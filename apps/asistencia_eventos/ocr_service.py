@@ -1,30 +1,42 @@
 """Best-effort OCR extraction for AgroHub's handwritten "Formato de
 Asistencia" sheets (see docs/asistencia-eventos.md).
 
-Runs fully offline/on-CPU via PaddleOCR (PP-OCRv6) — chosen over Tesseract
-because this form is handwritten, not printed: Tesseract failed to read a
-single attendee row on the real sample form, while PaddleOCR correctly
-transcribed document numbers, dates and times. Accuracy is still inherently
-limited on handwriting (names especially), which is why this only produces a
-*draft*: the scan endpoint returns it (plus the raw recognized text as a
-fallback) for a human to review and correct before the confirm endpoint
-actually saves anything.
+Two engines, picked via settings.ASISTENCIA_OCR_ENGINE ("paddleocr" | "llm"):
 
-Column detection works by locating the table's header row(s) — PaddleOCR
-sometimes splits a two-line header ("Tipo y numero de" / "documento") into
-separate boxes, so header keywords are accumulated across consecutive rows
-until a row with no recognizable header keyword is hit — and using each
-known header word's x-position as a column boundary. There's no ML table
-model involved, just position-based bucketing of recognized text into
-whichever column its x-coordinate falls under. When a single detection box
-spans multiple columns (PaddleOCR sometimes merges adjacent cells, e.g.
-"fundacion 3051035950" for Municipio+Teléfono), its words are re-split and
-each word's x-position is estimated proportionally within the box.
+- "paddleocr" (default): 100% offline/on-CPU via PaddleOCR (PP-OCRv6) — chosen
+  over Tesseract because this form is handwritten, not printed: Tesseract
+  failed to read a single attendee row on the real sample form, while
+  PaddleOCR correctly transcribed document numbers, dates and times. The
+  table structure is then recovered with hand-written position-bucketing
+  heuristics (see _detect_columns/_parse_table below), which is the fragile
+  part — it breaks on merged cells or a column that doesn't line up.
+
+- "llm": sends each full page image to a local vision-language model server
+  (llama.cpp's llama-server running Qwen2.5-VL, see
+  systemd/agrohub-ocr-llm.service) and asks it to return the same JSON shape
+  directly — no hand-rolled column bucketing needed, since the model reasons
+  about the whole table at once. Still 100% local/free (no external API,
+  no per-request cost) — just a heavier local model instead of a lighter one.
+  Grammar-constrained decoding (response_format=json_schema) guarantees the
+  output actually parses as JSON in this schema; it does NOT guarantee the
+  *content* is correct, so the prompt explicitly tells the model to return
+  null instead of guessing on illegible handwriting.
+
+Either way, accuracy on handwriting (names especially) is inherently
+limited, which is why this only produces a *draft*: the scan endpoint
+returns it (plus the raw recognized text as a fallback) for a human to
+review and correct before the confirm endpoint actually saves anything —
+that human step is what protects against an LLM engine confidently
+hallucinating a plausible-looking but wrong ID number.
 """
 
+import base64
 import io
+import json
 import re
 
+import requests
+from django.conf import settings
 from pdf2image import convert_from_bytes
 from PIL import Image
 from rest_framework import status as http_status
@@ -306,12 +318,7 @@ def _parse_table(rows: list) -> list:
     return asistentes
 
 
-def extract_asistencia(upload_file) -> dict:
-    try:
-        pages = _load_pages(upload_file)
-    except Exception as exc:  # noqa: BLE001
-        raise OcrUnavailable(detail=f"No se pudo leer el archivo: {exc}") from exc
-
+def _extract_with_paddleocr(pages: list) -> dict:
     all_rows = []
     raw_text_parts = []
     for page in pages:
@@ -332,3 +339,133 @@ def extract_asistencia(upload_file) -> dict:
         "asistentes": asistentes,
         "texto_crudo_ocr": "\n".join(raw_text_parts).strip(),
     }
+
+
+# JSON Schema for the LLM engine's response_format — llama-server turns this into a GBNF
+# grammar and constrains sampling to it, so the output is *guaranteed* to parse as JSON in
+# this exact shape. It does NOT guarantee the values themselves are correct — see the module
+# docstring on why the two-step draft/confirm flow still matters with this engine.
+_ASISTENTE_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "nombre": {"type": ["string", "null"]},
+        "tipo_documento": {"type": ["string", "null"]},
+        "numero_documento": {"type": ["string", "null"]},
+        "municipio": {"type": ["string", "null"]},
+        "telefono": {"type": ["string", "null"]},
+        "edad": {"type": ["integer", "null"]},
+        "genero": {"enum": ["F", "M", "O", None]},
+        "pertenencia_etnica": {"enum": ["ninguno", "indigena", "afro", "rom", "raizal", None]},
+    },
+    "required": ["numero_documento"],
+}
+
+_PAGINA_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "tema": {"type": ["string", "null"]},
+        "responsable": {"type": ["string", "null"]},
+        "lugar": {"type": ["string", "null"]},
+        "fecha": {"type": ["string", "null"]},
+        "hora_inicio": {"type": ["string", "null"]},
+        "hora_final": {"type": ["string", "null"]},
+        "asistentes": {"type": "array", "items": _ASISTENTE_JSON_SCHEMA},
+    },
+    "required": ["asistentes"],
+}
+
+_LLM_SYSTEM_PROMPT = """Eres un asistente que transcribe planillas de asistencia a eventos de AgroHub \
+(Colombia), llenadas a mano. Se te da la imagen de UNA página de la planilla.
+
+Devuelve ÚNICAMENTE el JSON pedido, sin explicaciones ni markdown, con esta información:
+- tema, responsable, lugar, fecha, hora_inicio, hora_final: los datos del encabezado del evento. \
+Si esta página no trae encabezado (por ejemplo, es una página de continuación de la tabla), deja \
+esos campos en null.
+- asistentes: una fila por cada persona en la tabla, con nombre, tipo_documento, numero_documento, \
+municipio, telefono, edad, genero y pertenencia_etnica.
+
+Reglas importantes:
+1. Transcribe numero_documento y telefono dígito por dígito, exactamente como están escritos — \
+son identificadores reales, no los redondees ni corrijas.
+2. Si un campo es ilegible o no estás seguro, devuelve null — NUNCA inventes un valor solo porque \
+parezca razonable. Es preferible null a un dato incorrecto.
+3. genero y pertenencia_etnica normalmente se marcan con una X o un check dentro de una columna: \
+usa la columna donde está la marca, no un valor por defecto.
+4. Ignora firmas, huellas o marcas en columnas que no correspondan a estos campos."""
+
+
+def _encode_page_png_b64(image) -> str:
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def _run_llm_ocr(image) -> dict:
+    """Sends one full page image to the local vision LLM and returns its structured
+    extraction for that page (same shape as one page's worth of _extract_with_paddleocr's
+    output). Raises OcrUnavailable (503) if the local llama-server isn't reachable or
+    doesn't return something the schema-constrained decoding should have prevented."""
+    payload = {
+        "messages": [
+            {"role": "system", "content": _LLM_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{_encode_page_png_b64(image)}"},
+                    },
+                    {"type": "text", "text": "Transcribe esta página según las instrucciones."},
+                ],
+            },
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "pagina_asistencia", "schema": _PAGINA_JSON_SCHEMA, "strict": True},
+        },
+        "temperature": 0,
+    }
+    try:
+        response = requests.post(settings.ASISTENCIA_LLM_OCR_URL, json=payload, timeout=300)
+        response.raise_for_status()
+        content = response.json()["choices"][0]["message"]["content"]
+        return json.loads(content)
+    except requests.RequestException as exc:
+        raise OcrUnavailable(detail=f"El servicio de OCR (LLM local) no respondió: {exc}") from exc
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise OcrUnavailable(detail="El servicio de OCR (LLM local) devolvió una respuesta inesperada") from exc
+
+
+def _extract_with_llm(pages: list) -> dict:
+    header = {}
+    asistentes = []
+    raw_parts = []
+    for page in pages:
+        page_data = _run_llm_ocr(page)
+        raw_parts.append(json.dumps(page_data, ensure_ascii=False))
+        for campo in ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final"):
+            if not header.get(campo) and page_data.get(campo):
+                header[campo] = page_data[campo]
+        asistentes.extend(page_data.get("asistentes") or [])
+
+    return {
+        "tema": header.get("tema"),
+        "responsable": header.get("responsable"),
+        "lugar": header.get("lugar"),
+        "fecha": header.get("fecha"),
+        "hora_inicio": header.get("hora_inicio"),
+        "hora_final": header.get("hora_final"),
+        "asistentes": asistentes,
+        "texto_crudo_ocr": "\n".join(raw_parts),
+    }
+
+
+def extract_asistencia(upload_file) -> dict:
+    try:
+        pages = _load_pages(upload_file)
+    except Exception as exc:  # noqa: BLE001
+        raise OcrUnavailable(detail=f"No se pudo leer el archivo: {exc}") from exc
+
+    if settings.ASISTENCIA_OCR_ENGINE == "llm":
+        return _extract_with_llm(pages)
+    return _extract_with_paddleocr(pages)

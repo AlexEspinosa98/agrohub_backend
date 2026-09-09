@@ -41,6 +41,46 @@ Aun así, la letra manuscrita hace que el resultado sea un **borrador**, no un d
 
 Nada se guarda en el paso 1 — es solo lectura del archivo. El paso 2 es el único que escribe en la base de datos.
 
+## Motor de OCR: PaddleOCR vs. LLM local
+
+`settings.ASISTENCIA_OCR_ENGINE` (env var, default `paddleocr`) elige entre dos motores, ambos
+100% locales y gratis — sin llamadas a APIs de pago, sin costo por escaneo:
+
+- **`paddleocr`** (default): PaddleOCR (PP-OCRv6) + un parser de tabla propio por posición de
+  columnas (`_detect_columns`/`_parse_table` en `ocr_service.py`). Rápido (unos segundos por
+  página), pero el parser es frágil ante celdas fusionadas o columnas corridas.
+- **`llm`**: cada página se manda como imagen completa a un modelo de visión (Qwen2.5-VL-7B,
+  cuantizado) corriendo local vía `llama.cpp` (ver `systemd/agrohub-ocr-llm.service`). El modelo
+  entiende la tabla completa de una vez — sin bucketing manual por posición — y la salida se
+  fuerza a un JSON Schema exacto (grammar-constrained decoding), así que **siempre** parsea, a
+  diferencia del parser heurístico. Probado con la hoja de muestra real:
+  - Mucho mejor que PaddleOCR en nombre, número de documento, municipio, teléfono y el
+    encabezado del evento — incluso rescató una fila completa que PaddleOCR perdía por
+    completo.
+  - **Poco confiable en las 6 columnas angostas de género/pertenencia étnica** (marcadas con
+    X): en las pruebas devolvió el mismo valor para las 10 personas de la hoja en vez de leer
+    la marca fila por fila — señal de que está adivinando un valor por defecto, no leyendo la
+    casilla. **Revisar esos dos campos con especial cuidado en el paso 2 (humano) antes de
+    guardar** — no se resolvió este punto todavía, queda como limitación conocida.
+  - **Lento**: ~180s por página en el servidor de producción (Xeon Silver 4410Y, CPU-only, 16
+    hilos asignados al modelo). Con varias páginas el tiempo crece linealmente.
+
+### Requisito de infraestructura si usas `llm`
+
+1. **Un solo proceso `llama-server` para todo el sitio** — no cargar el modelo dentro de los
+   workers de gunicorn: 3 workers × ~5GB de modelo serían ~15GB de RAM solo para esto, en un
+   servidor que ya comparte RAM con CienaNet, Mosquitto, mqtt_agrohub y MySQL. Instalar y
+   habilitar `systemd/agrohub-ocr-llm.service` (sirve una API compatible con OpenAI en
+   `127.0.0.1:8010`; ver el propio archivo para el detalle y las advertencias) — los 3 workers
+   de Django le hablan por HTTP local y comparten la misma copia del modelo en RAM.
+2. **Subir el timeout de gunicorn de `agrohub-backend`** de 120 a al menos 300 (edita
+   `ExecStart=... gunicorn ... --timeout 300 ...` en `/etc/systemd/system/agrohub-backend.service`,
+   luego `sudo systemctl daemon-reload && sudo systemctl restart agrohub-backend`) — con el
+   timeout en 120 el worker mata la petición a `/scan` antes de que el modelo termine de
+   responder, y el cliente ve un error de conexión en vez del resultado.
+3. Configurar en el `.env` de producción: `ASISTENCIA_OCR_ENGINE=llm` (y opcionalmente
+   `ASISTENCIA_LLM_OCR_URL` si el servicio corre en otro host/puerto).
+
 ## 1. Escanear (`POST /scan`)
 
 Multipart, campo `archivo` (PDF o imagen).

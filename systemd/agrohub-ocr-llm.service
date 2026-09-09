@@ -1,0 +1,55 @@
+# /etc/systemd/system/agrohub-ocr-llm.service
+# Copiar a /etc/systemd/system/agrohub-ocr-llm.service y luego:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now agrohub-ocr-llm
+#
+# Sirve un modelo de visión (Qwen2.5-VL-7B-Instruct, cuantizado Q4_K_M, gratis/local — sin
+# llamadas a APIs externas de pago) vía llama.cpp, con una API compatible con OpenAI
+# (POST /v1/chat/completions, acepta imágenes en base64) en 127.0.0.1:8010.
+#
+# Por qué un servicio aparte y no cargar el modelo dentro de Django: agrohub-backend corre 3
+# workers de gunicorn (procesos separados); si cada uno cargara su propia copia del modelo
+# (~5GB) serían ~15GB solo para esto, en un servidor que ya comparte RAM con CienaNet,
+# Mosquitto, el demonio de mqtt_agrohub y MySQL. Con un solo proceso llama-server, los 3
+# workers de Django comparten la MISMA copia del modelo en RAM vía HTTP local.
+#
+# --threads 16 deja el resto de los 48 hilos de CPU libres para los demás servicios del
+# servidor — subir este número si en la práctica sobra CPU.
+#
+# apps/asistencia_eventos/ocr_service.py le habla a este servicio cuando
+# ASISTENCIA_OCR_ENGINE=llm (ver settings.py); si este servicio está caído, ese código debe
+# fallar con un 503 claro, no colgarse — no lo pongas como dependencia dura (Requires=) de
+# agrohub-backend.
+#
+# --image-min-tokens 1024: recomendado por el propio llama-server al cargar un modelo Qwen-VL
+# (mejora el "grounding" — qué tan bien ubica detalles finos dentro de la imagen).
+#
+# ADVERTENCIA DE PRECISIÓN (probado con la hoja de muestra real): este motor es claramente
+# mejor que PaddleOCR para nombre/documento/municipio/teléfono/tema/etc., pero es POCO
+# CONFIABLE en las 6 columnas angostas de género/pertenencia étnica (marcadas con X) — en las
+# pruebas devolvió el mismo valor para las 10 personas de la hoja en vez de leer la marca fila
+# por fila. Revisar esos dos campos con especial cuidado en el paso humano antes de guardar.
+# Ver docs/asistencia-eventos.md.
+#
+# ADVERTENCIA DE LATENCIA: ~180s por página en esta CPU. agrohub-backend.service necesita su
+# --timeout de gunicorn subido de 120 a al menos 300 (ver docs/asistencia-eventos.md) o el
+# worker mata la petición antes de que el modelo termine.
+
+[Unit]
+Description=agrohub-ocr-llm — servidor de visión local (Qwen2.5-VL) para OCR de asistencia_eventos
+After=network.target
+
+[Service]
+Type=simple
+User=hubambiental002
+WorkingDirectory=/home/hubambiental002/local-services/llama.cpp
+ExecStart=/home/hubambiental002/local-services/llama.cpp/build/bin/llama-server \
+    -hf ggml-org/Qwen2.5-VL-7B-Instruct-GGUF:Q4_K_M \
+    --host 127.0.0.1 --port 8010 --threads 16 --ctx-size 8192 --image-min-tokens 1024
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/hubambiental002/local-services/logs/agrohub-ocr-llm.log
+StandardError=append:/home/hubambiental002/local-services/logs/agrohub-ocr-llm-error.log
+
+[Install]
+WantedBy=multi-user.target

@@ -188,6 +188,17 @@ RIEGO_IOT_API_KEY = os.getenv("RIEGO_IOT_API_KEY")
 RIEGO_IOT_MOSQUITTO_PASSWD_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_PASSWD_FILE", "/etc/mosquitto/passwd")
 RIEGO_IOT_MOSQUITTO_ACL_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_ACL_FILE", "/etc/mosquitto/acl.conf")
 
+# ---------------------------------------------------------------------------
+# apps.asistencia_eventos — motor de OCR para el escaneo de listas de asistencia.
+# "paddleocr" (default): 100% local, liviano, pero el parseo de tabla es heurístico y frágil.
+# "llm": también 100% local/gratis (ver systemd/agrohub-ocr-llm.service, un servidor
+# llama.cpp+Qwen2.5-VL aparte — nunca cargado dentro de los workers de gunicorn), más robusto
+# ante formatos irregulares porque el modelo entiende la tabla completa en vez de bucketing
+# por posición, a costa de ser más lento por página. Ver docs/asistencia-eventos.md.
+# ---------------------------------------------------------------------------
+ASISTENCIA_OCR_ENGINE = os.getenv("ASISTENCIA_OCR_ENGINE", "paddleocr")
+ASISTENCIA_LLM_OCR_URL = os.getenv("ASISTENCIA_LLM_OCR_URL", "http://127.0.0.1:8010/v1/chat/completions")
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
