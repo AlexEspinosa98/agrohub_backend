@@ -345,6 +345,12 @@ def _extract_with_paddleocr(pages: list) -> dict:
 # grammar and constrains sampling to it, so the output is *guaranteed* to parse as JSON in
 # this exact shape. It does NOT guarantee the values themselves are correct — see the module
 # docstring on why the two-step draft/confirm flow still matters with this engine.
+# NOTE: a property only gets forced INTO the output if it's listed in "required" — for a
+# non-required property, schema-constrained decoding lets the model omit the key entirely
+# instead of writing null, which is what happened here in testing (every "nombre" and
+# "tipo_documento" key vanished from a real response, not just their values). So every
+# property is required here even though most may legitimately be null — "required" only
+# forces the *key* to exist, the "null" in each type/enum is what allows an unsure value.
 _ASISTENTE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
@@ -357,7 +363,16 @@ _ASISTENTE_JSON_SCHEMA = {
         "genero": {"enum": ["F", "M", "O", None]},
         "pertenencia_etnica": {"enum": ["ninguno", "indigena", "afro", "rom", "raizal", None]},
     },
-    "required": ["numero_documento"],
+    "required": [
+        "nombre",
+        "tipo_documento",
+        "numero_documento",
+        "municipio",
+        "telefono",
+        "edad",
+        "genero",
+        "pertenencia_etnica",
+    ],
 }
 
 _PAGINA_JSON_SCHEMA = {
@@ -371,7 +386,7 @@ _PAGINA_JSON_SCHEMA = {
         "hora_final": {"type": ["string", "null"]},
         "asistentes": {"type": "array", "items": _ASISTENTE_JSON_SCHEMA},
     },
-    "required": ["asistentes"],
+    "required": ["tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final", "asistentes"],
 }
 
 _LLM_SYSTEM_PROMPT = """Eres un asistente que transcribe planillas de asistencia a eventos de AgroHub \
