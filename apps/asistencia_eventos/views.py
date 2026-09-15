@@ -3,6 +3,7 @@ import json
 import uuid
 
 import pandas as pd
+from dateutil import parser as dateutil_parser
 from django.core.files.storage import default_storage
 from django.http import HttpResponse
 from openpyxl.styles import Font, PatternFill
@@ -55,6 +56,96 @@ def scan_evento(request):
             "status": status.HTTP_200_OK,
             "message": "Documento escaneado — revisa y corrige antes de guardar",
             "data": extracted,
+        }
+    )
+
+
+def _parse_fecha_ocr(texto):
+    """El OCR devuelve la fecha/hora tal como aparecen escritas en la hoja (ej. "28/08/2026",
+    "8:30 am") — el flujo normal (/scan → revisión humana → /eventos) confía en que el frontend
+    las convierta a los formatos que esperan DateField/TimeField (ISO) al armar el payload de
+    confirmación. /scan-bulk no tiene ese paso humano, así que hace esa conversión aquí mismo;
+    si el texto no es un formato de fecha/hora reconocible, devuelve None en vez de fallar —
+    EventoConfirmSerializer ya acepta fecha/hora_inicio/hora_final en null."""
+    if not texto:
+        return None
+    try:
+        return dateutil_parser.parse(texto, dayfirst=True).date()
+    except (ValueError, OverflowError):
+        return None
+
+
+def _parse_hora_ocr(texto):
+    if not texto:
+        return None
+    try:
+        return dateutil_parser.parse(texto).time()
+    except (ValueError, OverflowError):
+        return None
+
+
+@api_view(["POST"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def scan_bulk(request):
+    """Sube y GUARDA DIRECTAMENTE varios documentos a la vez — sin el paso de revisión
+    humana de /scan + /eventos. Usa tal cual lo que el motor de OCR configurado
+    (settings.ASISTENCIA_OCR_ENGINE) haya extraído de cada archivo.
+
+    ADVERTENCIA: sin revisión, cualquier error del OCR queda guardado tal cual — nombres mal
+    transcritos, y en particular, si ASISTENCIA_OCR_ENGINE=llm, el campo pertenencia_etnica es
+    conocido por no ser confiable (ver docs/asistencia-eventos.md). Usar solo cuando la
+    velocidad importa más que la exactitud, aceptando que haya que corregir datos después.
+
+    Cada archivo se procesa y GUARDA de forma independiente, uno a la vez, en el mismo orden
+    en que llegó — si el archivo 3 de 10 falla (OCR ilegible, datos inválidos, etc.), los
+    archivos 1 y 2 ya quedaron guardados y el 4 en adelante se sigue procesando; el resultado
+    por archivo indica cuál se guardó y cuál no. Importante: con el motor LLM cada página tarda
+    ~90-180s en el hardware de producción — el timeout de nginx/gunicorn (300s) limita cuántos
+    archivos caben con seguridad en un solo request antes de que la conexión se corte. Si eso
+    pasa, los archivos ya procesados hasta ese punto quedan guardados igual (se guardan uno a
+    uno, no todos al final) — solo que el cliente no ve la respuesta; conviene revisar
+    GET /eventos después si un request de este endpoint se corta."""
+    archivos = request.FILES.getlist("archivos")
+    if not archivos:
+        raise ParseError("Falta al menos un archivo (campo 'archivos')")
+
+    resultados = []
+    for upload in archivos:
+        try:
+            extracted = extract_asistencia(upload)
+            payload = {
+                "tema": extracted.get("tema") or "(sin tema — completar manualmente)",
+                "responsable": extracted.get("responsable"),
+                "lugar": extracted.get("lugar"),
+                "fecha": _parse_fecha_ocr(extracted.get("fecha")),
+                "hora_inicio": _parse_hora_ocr(extracted.get("hora_inicio")),
+                "hora_final": _parse_hora_ocr(extracted.get("hora_final")),
+                "asistentes": extracted.get("asistentes") or [],
+            }
+            serializer = EventoConfirmSerializer(data=payload)
+            serializer.is_valid(raise_exception=True)
+            data = serializer.validated_data
+
+            documento_path = _save_scan(upload)
+            evento = services.guardar_evento(data, documento_path, extracted.get("texto_crudo_ocr"))
+            resultados.append(
+                {
+                    "archivo": upload.name,
+                    "status": "guardado",
+                    "evento_id": evento.id,
+                    "total_asistentes": evento.asistentes.count(),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 — un archivo fallando no debe tumbar el resto del lote
+            resultados.append({"archivo": upload.name, "status": "error", "detalle": str(exc)})
+
+    guardados = sum(1 for r in resultados if r["status"] == "guardado")
+    return Response(
+        {
+            "status": status.HTTP_200_OK,
+            "message": f"{guardados} de {len(archivos)} documento(s) guardados",
+            "data": resultados,
         }
     )
 

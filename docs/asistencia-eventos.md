@@ -165,6 +165,55 @@ curl -X POST "$BASE/asistencia-eventos/eventos" \
 - El evento (`Evento`, tabla `eventos_asistencia`) y cada fila de asistencia (`RegistroAsistencia`, tabla `registros_asistencia`, con `municipio`/`telefono`/`edad` — datos que sí cambian de un evento a otro) son independientes de otros módulos.
 - El PDF/imagen se guarda en `MEDIA_ROOT/asistencia_eventos/` (igual que las fotos de `hub_cgsm`) y su ruta relativa queda en `Evento.documento_escaneado`.
 
+## Carga masiva sin revisión (`POST /scan-bulk`)
+
+Variante para subir y **guardar directamente** varios documentos a la vez, saltándose el paso
+humano de revisión — usa tal cual lo que el motor de OCR configurado haya extraído de cada
+archivo. Pensado para cuando la velocidad importa más que la exactitud, aceptando que haya que
+corregir datos después; **no** reemplaza el flujo normal (`/scan` → revisar → `/eventos`), que
+sigue siendo la opción segura por defecto.
+
+```bash
+curl -X POST "$BASE/asistencia-eventos/scan-bulk" \
+  -H "Authorization: Token $TOKEN" \
+  -F "archivos=@hoja1.pdf" \
+  -F "archivos=@hoja2.pdf" \
+  -F "archivos=@hoja3.pdf"
+```
+
+Respuesta — un resultado por archivo, en el mismo orden en que se mandaron:
+
+```json
+{
+  "status": 200,
+  "message": "2 de 3 documento(s) guardados",
+  "data": [
+    {"archivo": "hoja1.pdf", "status": "guardado", "evento_id": 5, "total_asistentes": 10},
+    {"archivo": "hoja2.pdf", "status": "error", "detalle": "..."},
+    {"archivo": "hoja3.pdf", "status": "guardado", "evento_id": 6, "total_asistentes": 8}
+  ]
+}
+```
+
+**Limitaciones — leer antes de usar:**
+
+- **Sin revisión humana**: cualquier error del motor de OCR se guarda tal cual. Con
+  `ASISTENCIA_OCR_ENGINE=llm` en particular, `pertenencia_etnica` es conocido por no ser
+  confiable (ver más abajo) — se guarda igual, sin nadie que lo corrija antes.
+- **Timeout con el motor LLM**: cada página tarda ~90-180s en el hardware de producción. El
+  request completo es síncrono, así que con el timeout de nginx/gunicorn en 300s, en la
+  práctica solo caben con seguridad **1-2 archivos por request** antes de arriesgarse a que la
+  conexión se corte a mitad de camino. Si eso pasa, los archivos ya procesados hasta ese punto
+  quedan guardados igual (cada uno se guarda apenas termina, no todos al final) — solo que el
+  cliente no ve la respuesta; conviene revisar `GET /eventos` si un request de este endpoint se
+  corta, en vez de asumir que no se guardó nada.
+- Si un archivo no trae `tema` legible, se guarda con un texto de relleno
+  (`"(sin tema — completar manualmente)"`) en vez de descartar todo el archivo — los
+  asistentes son el dato que más importa rescatar.
+- Un archivo que falle (OCR ilegible, `numero_documento` repetido dentro del mismo archivo,
+  etc.) no tumba el resto del lote — queda marcado `"status": "error"` con el detalle, y los
+  demás archivos se siguen procesando.
+
 ## Listado y detalle
 
 - `GET /asistencia-eventos/eventos` — lista de eventos con conteo de asistentes.
