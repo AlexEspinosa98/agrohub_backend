@@ -24,6 +24,15 @@
 # --image-min-tokens 1024: recomendado por el propio llama-server al cargar un modelo Qwen-VL
 # (mejora el "grounding" — qué tan bien ubica detalles finos dentro de la imagen).
 #
+# --parallel 1: por defecto el server abre 4 "slots" que SE REPARTEN el mismo --ctx-size (KV
+# cache unificado) — con imágenes de página completa (~2000 tokens solo para la imagen), 2+
+# escaneos llegando casi al mismo tiempo agotan ese cupo compartido y el request falla con
+# "failed to find a memory slot for batch..." / "failed to decode image" (visto en producción:
+# funcionaba en pruebas de una sola llamada a la vez, empezó a fallar con más de un admin
+# usando /scan por encima). Con 1 solo slot, cada request usa el --ctx-size completo para sí
+# mismo — se procesan en fila en vez de en paralelo, aceptable para una herramienta de admin de
+# bajo tráfico donde el cuello de botella ya es la CPU, no la concurrencia.
+#
 # ADVERTENCIA DE PRECISIÓN (probado con la hoja de muestra real): este motor es claramente
 # mejor que PaddleOCR para nombre/documento/municipio/teléfono/tema/etc., pero es POCO
 # CONFIABLE en las 6 columnas angostas de género/pertenencia étnica (marcadas con X) — en las
@@ -45,7 +54,7 @@ User=hubambiental002
 WorkingDirectory=/home/hubambiental002/local-services/llama.cpp
 ExecStart=/home/hubambiental002/local-services/llama.cpp/build/bin/llama-server \
     -hf ggml-org/Qwen2.5-VL-7B-Instruct-GGUF:Q4_K_M \
-    --host 127.0.0.1 --port 8010 --threads 16 --ctx-size 8192 --image-min-tokens 1024
+    --host 127.0.0.1 --port 8010 --threads 16 --ctx-size 8192 --image-min-tokens 1024 --parallel 1
 Restart=always
 RestartSec=5
 StandardOutput=append:/home/hubambiental002/local-services/logs/agrohub-ocr-llm.log
