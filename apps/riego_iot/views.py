@@ -19,7 +19,7 @@ from apps.riego_iot.models import (
 )
 from apps.riego_iot.mosquitto_admin import MosquittoAdminError, crear_credencial, eliminar_credencial, rotar_password
 from apps.riego_iot.permissions import TieneApiKeyRiego
-from apps.riego_iot.serializers import DispositivoCrearSerializer, DispositivoSerializer
+from apps.riego_iot.serializers import DispositivoCrearSerializer, DispositivoEditarSerializer, DispositivoSerializer
 
 # Ventana usada para decidir "conectado ahora" cuando no hay un status/LWT reciente que lo diga
 # explícitamente — coincide con la ventana de 3 minutos del manual UG56 (sección 08) para el
@@ -188,6 +188,19 @@ def dispositivos(request):
     responses={200: DispositivoSerializer, 404: OpenApiResponse(description="No existe ese device_id.")},
 )
 @extend_schema(
+    methods=["PATCH"],
+    tags=["riego-iot"],
+    summary="Editar el nombre de un gateway ya registrado",
+    description=(
+        "Solo permite cambiar 'nombre' — device_id/client_id/base_topic identifican la credencial "
+        "MQTT real y no se tocan aquí (para eso está POST /dispositivos/ al crear, o rotar-password/ "
+        "para la contraseña)."
+    ),
+    parameters=[_API_KEY_HEADER],
+    request=DispositivoEditarSerializer,
+    responses={200: DispositivoSerializer, 404: OpenApiResponse(description="No existe ese device_id.")},
+)
+@extend_schema(
     methods=["DELETE"],
     tags=["riego-iot"],
     summary="Dar de baja un gateway (revoca su credencial MQTT, no borra sus lecturas históricas)",
@@ -199,12 +212,19 @@ def dispositivos(request):
         502: OpenApiResponse(description="Falló mosquitto_admin al eliminar la credencial."),
     },
 )
-@api_view(["GET", "DELETE"])
+@api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([TieneApiKeyRiego])
 def dispositivo_detalle(request, device_id):
     dispositivo = _obtener_dispositivo_o_404(device_id)
 
     if request.method == "GET":
+        return Response(DispositivoSerializer(dispositivo).data)
+
+    if request.method == "PATCH":
+        serializer = DispositivoEditarSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        dispositivo.nombre = serializer.validated_data["nombre"]
+        dispositivo.save(update_fields=["nombre"])
         return Response(DispositivoSerializer(dispositivo).data)
 
     if not dispositivo.client_id:
@@ -391,3 +411,89 @@ def lecturas_suelo_dispositivo(request, device_id):
         }
         for r in qs
     ])
+
+
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Histórico de estado de válvulas de un gateway",
+    description="Cada fila es un cambio/reporte de estado de las válvulas — para graficar cuándo se abrieron/cerraron y quién lo originó (auto/remoto/manual/reportado).",
+    parameters=_LECTURA_QUERY_PARAMS,
+    responses={200: inline_serializer("LecturaValvulaItem", {
+        "medido_en": serializers.DateTimeField(), "ro1": serializers.CharField(allow_null=True),
+        "ro2": serializers.CharField(allow_null=True),
+        "origen": serializers.ChoiceField(choices=["auto", "remoto", "manual", "reportado"], allow_null=True),
+        "ultimo_comando": serializers.CharField(allow_null=True),
+    }, many=True)},
+)
+@api_view(["GET"])
+@permission_classes([TieneApiKeyRiego])
+def lecturas_valvulas_dispositivo(request, device_id):
+    desde, hasta, limite = _rango_fechas(request)
+    qs = (
+        EstadoValvula.objects.filter(device_id=device_id, medido_en__range=(desde, hasta))
+        .order_by("-medido_en")[:limite]
+    )
+    return Response([
+        {
+            "medido_en": r.medido_en, "ro1": r.ro1, "ro2": r.ro2,
+            "origen": r.origen, "ultimo_comando": r.ultimo_comando,
+        }
+        for r in qs
+    ])
+
+
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Histórico de health/conectividad reportado por un gateway",
+    description="Uno por cada heartbeat/health recibido — modo de control (nube/local), si hay override manual activo, y el estado de válvulas que el propio gateway reportó en ese momento.",
+    parameters=_LECTURA_QUERY_PARAMS,
+    responses={200: inline_serializer("LecturaHealthItem", {
+        "medido_en": serializers.DateTimeField(),
+        "mqtt_conectado": serializers.BooleanField(allow_null=True),
+        "ultimo_uplink": serializers.DateTimeField(allow_null=True),
+        "modo_control": serializers.ChoiceField(choices=["nube", "local"], allow_null=True),
+        "override_manual": serializers.BooleanField(allow_null=True),
+        "valvulas": serializers.JSONField(allow_null=True),
+    }, many=True)},
+)
+@api_view(["GET"])
+@permission_classes([TieneApiKeyRiego])
+def lecturas_health_dispositivo(request, device_id):
+    desde, hasta, limite = _rango_fechas(request)
+    qs = (
+        Healthcheck.objects.filter(device_id=device_id, medido_en__range=(desde, hasta))
+        .order_by("-medido_en")[:limite]
+    )
+    return Response([
+        {
+            "medido_en": r.medido_en, "mqtt_conectado": r.mqtt_conectado,
+            "ultimo_uplink": r.ultimo_uplink, "modo_control": r.modo_control,
+            "override_manual": r.override_manual, "valvulas": r.valvulas,
+        }
+        for r in qs
+    ])
+
+
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Histórico de conexión (online/offline) de un gateway — para graficar uptime",
+    description=(
+        "Log crudo de eventos de conexión/desconexión (LWT y reconexión de Mosquitto), no lecturas "
+        "de sensores — usa 'recibido_en' como filtro de fecha, no 'medido_en' (este dato no lo mide "
+        "el gateway, lo genera el broker cuando la conexión cambia)."
+    ),
+    parameters=_LECTURA_QUERY_PARAMS,
+    responses={200: inline_serializer("LecturaConexionItem", {
+        "recibido_en": serializers.DateTimeField(),
+        "estado": serializers.ChoiceField(choices=["online", "offline"]),
+    }, many=True)},
+)
+@api_view(["GET"])
+@permission_classes([TieneApiKeyRiego])
+def lecturas_conexion_dispositivo(request, device_id):
+    desde, hasta, limite = _rango_fechas(request)
+    qs = (
+        EstadoConexion.objects.filter(device_id=device_id, recibido_en__range=(desde, hasta))
+        .order_by("-recibido_en")[:limite]
+    )
+    return Response([{"recibido_en": r.recibido_en, "estado": r.estado} for r in qs])

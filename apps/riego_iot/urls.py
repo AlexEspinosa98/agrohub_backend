@@ -22,4 +22,19 @@ urlpatterns = [
         views.lecturas_suelo_dispositivo,
         name="riego_lecturas_suelo",
     ),
+    path(
+        "dashboard/<str:device_id>/lecturas/valvulas/",
+        views.lecturas_valvulas_dispositivo,
+        name="riego_lecturas_valvulas",
+    ),
+    path(
+        "dashboard/<str:device_id>/lecturas/health/",
+        views.lecturas_health_dispositivo,
+        name="riego_lecturas_health",
+    ),
+    path(
+        "dashboard/<str:device_id>/lecturas/conexion/",
+        views.lecturas_conexion_dispositivo,
+        name="riego_lecturas_conexion",
+    ),
 ]

@@ -2,7 +2,7 @@
 
 # API de Riego IoT (`apps.riego_iot`) — referencia para frontend
 
-**Última actualización:** 2026-08-30 · **Estado:** en producción, 16 gateways activos
+**Última actualización:** 2026-09-16 · **Estado:** en producción, 16 gateways activos
 
 Administración de gateways de riego (Milesight UG56) y dashboard de telemetría en tiempo real.
 Los datos vienen de sensores de campo (temperatura/humedad ambiente, humedad/temperatura/
@@ -35,12 +35,16 @@ Sin el header, o con una clave incorrecta, responde `401`:
 | `GET` | `/dispositivos/` | Lista todos los gateways |
 | `POST` | `/dispositivos/` | Da de alta un gateway nuevo (crea su credencial MQTT) |
 | `GET` | `/dispositivos/{device_id}/` | Detalle de un gateway |
+| `PATCH` | `/dispositivos/{device_id}/` | Cambia el `nombre` de un gateway ya registrado |
 | `DELETE` | `/dispositivos/{device_id}/` | Revoca el acceso de un gateway y lo marca inactivo |
 | `POST` | `/dispositivos/{device_id}/rotar-password/` | Genera una contraseña nueva para ese gateway |
 | `GET` | `/dashboard/resumen/` | Última lectura de cada tipo, de todos los gateways activos |
 | `GET` | `/dashboard/{device_id}/` | Lo mismo, para un solo gateway |
 | `GET` | `/dashboard/{device_id}/lecturas/ambiente/` | Histórico de temperatura/humedad ambiente |
 | `GET` | `/dashboard/{device_id}/lecturas/suelo/` | Histórico de humedad/temperatura/conductividad de suelo |
+| `GET` | `/dashboard/{device_id}/lecturas/valvulas/` | Histórico de estado de las electroválvulas |
+| `GET` | `/dashboard/{device_id}/lecturas/health/` | Histórico de healthchecks (modo de control, override manual) |
+| `GET` | `/dashboard/{device_id}/lecturas/conexion/` | Histórico de eventos online/offline — para graficar uptime |
 
 ---
 
@@ -163,6 +167,40 @@ Response `200`:
   "base_topic": "ahub/device0001",
   "client_id": "ug56-agrohub1",
   "nombre": null,
+  "activo": true,
+  "primera_vez_visto": "2026-08-30T16:47:12.101Z",
+  "ultima_vez_visto": "2026-08-30T16:47:12.101Z"
+}
+```
+
+Error — no existe, `404`:
+```json
+{ "detail": "No existe el dispositivo 'device0099'." }
+```
+</details>
+
+## `PATCH /dispositivos/{device_id}/`
+
+Cambia el `nombre` de un gateway ya registrado — es el único campo editable aquí. Para
+`device_id`/`client_id`/credenciales no hay "editar": se dan de baja (`DELETE`) y se crean de
+nuevo (`POST`), o se usa `rotar-password/` para la contraseña.
+
+<details><summary>Ejemplo</summary>
+
+```
+PATCH /api/agrohub/riego-iot/dispositivos/device0001/
+Content-Type: application/json
+
+{ "nombre": "Finca La Esperanza" }
+```
+
+Response `200` — el dispositivo actualizado, misma forma que `GET`:
+```json
+{
+  "device_id": "device0001",
+  "base_topic": "ahub/device0001",
+  "client_id": "ug56-agrohub1",
+  "nombre": "Finca La Esperanza",
   "activo": true,
   "primera_vez_visto": "2026-08-30T16:47:12.101Z",
   "ultima_vez_visto": "2026-08-30T16:47:12.101Z"
@@ -314,6 +352,84 @@ Response `200`:
 `recuperado: true` significa que el gateway estuvo desconectado, guardó la lectura en su microSD
 local, y la reenvió al reconectar — `medido_en` sigue siendo el momento real de la medición, no
 el momento en que llegó al servidor (puede ser horas antes).
+</details>
+
+## `GET /dashboard/{device_id}/lecturas/valvulas/`
+
+Histórico de estado de las electroválvulas — mismos `desde`/`hasta`/`limite` que ambiente/suelo.
+
+<details><summary>Ejemplo</summary>
+
+```
+GET /api/agrohub/riego-iot/dashboard/device0001/lecturas/valvulas/?limite=2
+```
+
+Response `200`:
+```json
+[
+  {
+    "medido_en": "2026-09-16T14:10:00Z",
+    "ro1": "ON",
+    "ro2": "OFF",
+    "origen": "reportado",
+    "ultimo_comando": "abrir_ro1"
+  }
+]
+```
+
+`origen` indica quién originó ese estado: `"auto"` (lógica automática por humedad de suelo),
+`"remoto"` (comando desde la plataforma), `"manual"` (botón físico en el gateway), o
+`"reportado"` (confirmación real del controlador — la fuente de verdad sobre lo que
+efectivamente está pasando, a diferencia de los otros tres que son la intención de un comando).
+</details>
+
+## `GET /dashboard/{device_id}/lecturas/health/`
+
+Histórico de healthchecks — uno por cada latido del gateway (cada ~60s), con el modo de control
+vigente en ese momento y si había un override manual activo.
+
+<details><summary>Ejemplo</summary>
+
+```
+GET /api/agrohub/riego-iot/dashboard/device0001/lecturas/health/?limite=2
+```
+
+Response `200`:
+```json
+[
+  {
+    "medido_en": "2026-09-16T14:10:00Z",
+    "mqtt_conectado": true,
+    "ultimo_uplink": "2026-09-16T14:09:47Z",
+    "modo_control": "nube",
+    "override_manual": false,
+    "valvulas": {"ro1": "ON", "ro2": "OFF"}
+  }
+]
+```
+</details>
+
+## `GET /dashboard/{device_id}/lecturas/conexion/`
+
+Log de eventos de conexión/desconexión del gateway con el broker — para graficar uptime o
+detectar caídas. A diferencia de los otros históricos, **el filtro de fecha usa `recibido_en`**,
+no `medido_en` — este dato no lo mide el gateway, lo genera Mosquitto cuando la conexión cambia
+(LWT al desconectar, reconexión al volver).
+
+<details><summary>Ejemplo</summary>
+
+```
+GET /api/agrohub/riego-iot/dashboard/device0001/lecturas/conexion/?limite=3
+```
+
+Response `200`:
+```json
+[
+  {"recibido_en": "2026-09-16T14:05:00Z", "estado": "online"},
+  {"recibido_en": "2026-09-16T09:12:33Z", "estado": "offline"},
+  {"recibido_en": "2026-09-16T09:10:01Z", "estado": "online"}
+]
+```
 </details>
 
 ---

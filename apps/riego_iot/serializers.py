@@ -34,3 +34,11 @@ class DispositivoCrearSerializer(serializers.Serializer):
         if not CLIENT_ID_RE.match(value):
             raise serializers.ValidationError("client_id inválido — 3 a 60 caracteres alfanuméricos, '-' o '_'.")
         return value
+
+
+class DispositivoEditarSerializer(serializers.Serializer):
+    """Solo 'nombre' es editable aquí — device_id/client_id/base_topic identifican la
+    credencial MQTT real y cambiarlos requeriría recrearla (ver POST /dispositivos/ y
+    rotar-password/), no un simple update de fila."""
+
+    nombre = serializers.CharField(allow_null=True, allow_blank=True)
