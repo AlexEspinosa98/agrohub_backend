@@ -1,9 +1,10 @@
 # Historias de usuario — `apps.riego_iot` (gateways de riego / dashboard MQTT)
 
 **Última actualización:** 2026-09-16 · **Rol:** administrador de la plataforma AgroHub (panel
-interno, no la app de campo). Todos los endpoints requieren el header `X-API-Key` (clave de
-administración de riego IoT, distinta de los tokens de usuario de `user_activity`) — ver
-`docs/API_RIEGO_IOT.md` para la referencia técnica completa con ejemplos reales.
+interno, no la app de campo). Todos los endpoints requieren `Authorization: Token <token>` de
+una cuenta con rol `admin` o `superadmin` — mismo login que el resto de la app (`user_activity`),
+no una API key separada — ver `docs/API_RIEGO_IOT.md` para la referencia técnica completa con
+ejemplos reales.
 
 ---
 

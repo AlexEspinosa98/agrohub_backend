@@ -16,17 +16,39 @@ sin IA, escrito por un daemon de ingesta MQTT que corre 24/7 (ver `INSTALACION.m
 https://back.alunaia.co/api/agrohub/riego-iot/
 ```
 
-Toda ruta requiere el header:
+Toda ruta requiere el mismo header que el resto de la app (**no** una API key propia — ver nota
+más abajo):
 
 ```
-X-API-Key: <clave de administración>
+Authorization: Token <token de sesión>
 ```
 
-Sin el header, o con una clave incorrecta, responde `401`:
+El token se obtiene con `POST /user-activity/users/login`, igual que cualquier otro módulo, y la
+cuenta debe tener rol `admin` o `superadmin` (asignado vía `PUT /user-activity/users/<id>/role`
+por un superadmin — ver `docs/roles-api.md`).
 
+Sin el header, `401`:
 ```json
-{"detail": "API key inválida o ausente (header X-API-Key)."}
+{"detail": "Falta header Authorization: Token <token>"}
 ```
+
+Con token válido pero sin rol asignado, `403`:
+```json
+{"detail": "Tu cuenta aún no tiene un rol asignado. Contacta a un superadmin."}
+```
+
+Con rol `user` (ni admin ni superadmin), `403`:
+```json
+{"detail": "Requiere rol admin"}
+```
+
+> **Por qué no una API key fija:** hasta 2026-09-16 estos endpoints usaban un `X-API-Key`
+> compartido pensado para "un puñado de operadores internos". Se cambió al token de sesión
+> normal porque el panel de riego se consume desde el mismo frontend web que el resto de la
+> app — una clave fija embebida en código de frontend (navegador) es visible para cualquiera que
+> abra las herramientas de desarrollador, así que en la práctica no era secreta. Si necesitas
+> automatizar algo servidor-a-servidor sin sesión de usuario, pide que se evalúe un mecanismo
+> aparte para ese caso específico — no reutilices credenciales de un admin real en un script.
 
 ## Resumen de endpoints
 
