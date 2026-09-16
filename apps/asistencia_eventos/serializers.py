@@ -35,3 +35,29 @@ class EventoConfirmSerializer(serializers.Serializer):
                 f"Documentos repetidos en la misma carga: {', '.join(sorted(duplicados))}"
             )
         return value
+
+
+class EventoUpdateSerializer(serializers.Serializer):
+    tema = serializers.CharField(required=False)
+    responsable = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    lugar = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    fecha = serializers.DateField(required=False, allow_null=True)
+    hora_inicio = serializers.TimeField(required=False, allow_null=True)
+    hora_final = serializers.TimeField(required=False, allow_null=True)
+
+
+class PersonaUpdateSerializer(serializers.Serializer):
+    nombre = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    tipo_documento = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    genero = serializers.ChoiceField(choices=["F", "M", "O"], required=False, allow_null=True)
+    pertenencia_etnica = serializers.ChoiceField(
+        choices=["ninguno", "indigena", "afro", "rom", "raizal"],
+        required=False,
+        allow_null=True,
+    )
+
+
+class RegistroAsistenciaUpdateSerializer(serializers.Serializer):
+    municipio = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    telefono = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    edad = serializers.IntegerField(required=False, allow_null=True)

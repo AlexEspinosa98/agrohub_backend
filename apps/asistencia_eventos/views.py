@@ -14,9 +14,14 @@ from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
 
 from apps.asistencia_eventos import services
-from apps.asistencia_eventos.models import Evento, PersonaAsistente
+from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia
 from apps.asistencia_eventos.ocr_service import extract_asistencia
-from apps.asistencia_eventos.serializers import EventoConfirmSerializer
+from apps.asistencia_eventos.serializers import (
+    EventoConfirmSerializer,
+    EventoUpdateSerializer,
+    PersonaUpdateSerializer,
+    RegistroAsistenciaUpdateSerializer,
+)
 from apps.user_activity.authentication import TokenHeaderAuthentication
 from apps.user_activity.permissions import IsAdminRole, IsAuthenticatedWithRole
 
@@ -213,13 +218,28 @@ def eventos_list_create(request):
     return _listar_eventos(request)
 
 
-@api_view(["GET"])
+@api_view(["GET", "PUT", "DELETE"])
 @authentication_classes(_AUTH)
 @permission_classes(_ADMIN_ONLY)
 def evento_detail(request, evento_id: int):
     evento = Evento.objects.filter(id=evento_id).first()
     if not evento:
         raise NotFound("Evento no encontrado")
+
+    if request.method == "DELETE":
+        evento.delete()  # cascada: borra también sus RegistroAsistencia (no las PersonaAsistente, que son compartidas)
+        return Response({"status": status.HTTP_200_OK, "message": "evento eliminado", "data": None})
+
+    if request.method == "PUT":
+        serializer = EventoUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = {k: v for k, v in serializer.validated_data.items() if v is not None}
+        if not data:
+            raise ParseError("Nada para actualizar")
+        for key, value in data.items():
+            setattr(evento, key, value)
+        evento.save()
+        return Response({"status": status.HTTP_200_OK, "message": "evento actualizado", "data": None})
 
     asistentes = [
         {
@@ -253,6 +273,90 @@ def evento_detail(request, evento_id: int):
             },
         }
     )
+
+
+@api_view(["GET", "PUT", "DELETE"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def persona_detail(request, numero_documento: str):
+    """Registro maestro de una persona (por número de documento) — para
+    corregir un dato que el OCR leyó mal (nombre, género, etnia) o para
+    eliminarla por completo del sistema. Eliminar una persona borra también,
+    en cascada, su participación en TODOS los eventos donde aparece."""
+    persona = PersonaAsistente.objects.filter(numero_documento=numero_documento).first()
+    if not persona:
+        raise NotFound("Persona no encontrada")
+
+    if request.method == "DELETE":
+        persona.delete()
+        return Response({"status": status.HTTP_200_OK, "message": "persona eliminada", "data": None})
+
+    if request.method == "PUT":
+        serializer = PersonaUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = {k: v for k, v in serializer.validated_data.items() if v is not None}
+        if not data:
+            raise ParseError("Nada para actualizar")
+        for key, value in data.items():
+            setattr(persona, key, value)
+        persona.save()
+        return Response({"status": status.HTTP_200_OK, "message": "persona actualizada", "data": None})
+
+    asistencias = [
+        {
+            "evento_id": r.evento_id,
+            "evento_tema": r.evento.tema,
+            "evento_fecha": r.evento.fecha,
+            "municipio": r.municipio,
+            "telefono": r.telefono,
+            "edad": r.edad,
+        }
+        for r in persona.asistencias.select_related("evento").order_by("-evento__fecha")
+    ]
+    return Response(
+        {
+            "status": status.HTTP_200_OK,
+            "message": "persona",
+            "data": {
+                "numero_documento": persona.numero_documento,
+                "tipo_documento": persona.tipo_documento,
+                "nombre": persona.nombre,
+                "genero": persona.genero,
+                "pertenencia_etnica": persona.pertenencia_etnica,
+                "asistencias": asistencias,
+            },
+        }
+    )
+
+
+@api_view(["PUT", "DELETE"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def evento_asistente_detail(request, evento_id: int, numero_documento: str):
+    """Corrige o retira la participación de UNA persona en UN evento
+    puntual (municipio/teléfono/edad de esa asistencia), sin tocar su
+    registro maestro (PersonaAsistente) ni el resto del evento."""
+    registro = (
+        RegistroAsistencia.objects.select_related("persona")
+        .filter(evento_id=evento_id, persona__numero_documento=numero_documento)
+        .first()
+    )
+    if not registro:
+        raise NotFound("Ese documento no está registrado como asistente de este evento")
+
+    if request.method == "DELETE":
+        registro.delete()
+        return Response({"status": status.HTTP_200_OK, "message": "asistente retirado del evento", "data": None})
+
+    serializer = RegistroAsistenciaUpdateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = {k: v for k, v in serializer.validated_data.items() if v is not None}
+    if not data:
+        raise ParseError("Nada para actualizar")
+    for key, value in data.items():
+        setattr(registro, key, value)
+    registro.save()
+    return Response({"status": status.HTTP_200_OK, "message": "asistencia actualizada", "data": None})
 
 
 @api_view(["GET"])
