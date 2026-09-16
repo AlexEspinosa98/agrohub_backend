@@ -156,6 +156,26 @@ SPECTACULAR_SETTINGS = {
     # @latest se rompio en produccion (swagger-ui-bundle.js: 'Z.first(...).isEmpty is not a
     # function', crashea CADA operacion) - fijar una version estable conocida, igual que aluna.
     "SWAGGER_UI_DIST": "https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14",
+    # apps.riego_iot se autentica con X-API-Key vía permission_classes (TieneApiKeyRiego), no
+    # con un authentication_class real — por eso no hay un OpenApiAuthenticationExtension que
+    # drf-spectacular pueda auto-descubrir (a diferencia de TokenHeaderAuthenticationScheme en
+    # user_activity). Se declara el esquema a mano aquí y se referencia con
+    # security=[{"ApiKeyRiego": []}] en cada @extend_schema de apps/riego_iot/views.py — así
+    # Swagger UI muestra el botón "Authorize" (clave única para todos los endpoints) en vez de
+    # tener que escribirla a mano en cada operación.
+    "APPEND_COMPONENTS": {
+        "securitySchemes": {
+            "ApiKeyRiego": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key",
+                "description": (
+                    "Clave única de administración de riego IoT (apps.riego_iot) — "
+                    "no es un token de sesión de usuario, es RIEGO_IOT_API_KEY del servidor."
+                ),
+            },
+        },
+    },
 }
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20MB, for survey photo uploads

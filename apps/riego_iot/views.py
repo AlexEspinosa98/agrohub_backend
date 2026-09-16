@@ -26,13 +26,15 @@ from apps.riego_iot.serializers import DispositivoCrearSerializer, DispositivoEd
 # failover nube->local, mismo criterio con el que el propio gateway decide "perdí la nube".
 VENTANA_CONEXION = timedelta(minutes=3)
 
-_API_KEY_HEADER = OpenApiParameter(
-    "X-API-Key", str, OpenApiParameter.HEADER, required=True,
-    description="API key única de administración de riego IoT (interna, no es la del usuario final).",
-)
+# Ver config/settings.py::SPECTACULAR_SETTINGS["APPEND_COMPONENTS"] para el esquema
+# "ApiKeyRiego" — TieneApiKeyRiego es un permission_class, no un authentication_class, así que
+# no hay un OpenApiAuthenticationExtension que drf-spectacular pueda auto-descubrir; se declara
+# a mano con `auth=_SECURITY` en cada @extend_schema de este archivo (el kwarg del decorador se
+# llama `auth`, pero su valor es justamente el objeto que termina en operation["security"]) para
+# que Swagger UI muestre el botón "Authorize" en vez de un parámetro de header más.
+_SECURITY = [{"ApiKeyRiego": []}]
 
 _LECTURA_QUERY_PARAMS = [
-    _API_KEY_HEADER,
     OpenApiParameter("desde", str, OpenApiParameter.QUERY, description="ISO 8601. Default: hasta - 7 días."),
     OpenApiParameter("hasta", str, OpenApiParameter.QUERY, description="ISO 8601. Default: ahora."),
     OpenApiParameter("limite", int, OpenApiParameter.QUERY, description="Tope de filas, máx. 5000.", default=500),
@@ -87,9 +89,9 @@ def _obtener_dispositivo_o_404(device_id):
     tags=["riego-iot"],
     summary="Listar gateways registrados",
     parameters=[
-        _API_KEY_HEADER,
         OpenApiParameter("solo_activos", str, OpenApiParameter.QUERY, description="'true' para excluir los dados de baja."),
     ],
+    auth=_SECURITY,
     responses={200: DispositivoSerializer(many=True)},
 )
 @extend_schema(
@@ -101,7 +103,7 @@ def _obtener_dispositivo_o_404(device_id):
         "y recarga el broker. La contraseña generada se devuelve UNA sola vez — no queda guardada "
         "en ningún lado en texto plano, ver `nota` en la respuesta."
     ),
-    parameters=[_API_KEY_HEADER],
+    auth=_SECURITY,
     request=DispositivoCrearSerializer,
     examples=[OpenApiExample("Registrar gateway", value={
         "device_id": "device0017", "client_id": "ug56-agrohub17", "nombre": "Finca La Esperanza",
@@ -184,7 +186,7 @@ def dispositivos(request):
     methods=["GET"],
     tags=["riego-iot"],
     summary="Detalle de un gateway registrado",
-    parameters=[_API_KEY_HEADER],
+    auth=_SECURITY,
     responses={200: DispositivoSerializer, 404: OpenApiResponse(description="No existe ese device_id.")},
 )
 @extend_schema(
@@ -196,7 +198,7 @@ def dispositivos(request):
         "MQTT real y no se tocan aquí (para eso está POST /dispositivos/ al crear, o rotar-password/ "
         "para la contraseña)."
     ),
-    parameters=[_API_KEY_HEADER],
+    auth=_SECURITY,
     request=DispositivoEditarSerializer,
     responses={200: DispositivoSerializer, 404: OpenApiResponse(description="No existe ese device_id.")},
 )
@@ -204,7 +206,7 @@ def dispositivos(request):
     methods=["DELETE"],
     tags=["riego-iot"],
     summary="Dar de baja un gateway (revoca su credencial MQTT, no borra sus lecturas históricas)",
-    parameters=[_API_KEY_HEADER],
+    auth=_SECURITY,
     responses={
         204: OpenApiResponse(description="Credencial eliminada de Mosquitto y dispositivo marcado inactivo."),
         400: OpenApiResponse(description="El dispositivo no tiene client_id registrado (fue detectado solo por telemetría) — hay que borrar su credencial a mano en Mosquitto."),
@@ -248,7 +250,7 @@ def dispositivo_detalle(request, device_id):
     tags=["riego-iot"],
     summary="Rotar la contraseña MQTT de un gateway",
     description="La contraseña anterior deja de funcionar de inmediato al aplicarse (recarga el broker).",
-    parameters=[_API_KEY_HEADER],
+    auth=_SECURITY,
     request=None,
     responses={
         200: OpenApiResponse(
@@ -323,7 +325,7 @@ def _resumen_dispositivo(device_id):
     tags=["riego-iot"],
     summary="Resumen en vivo de todos los gateways activos",
     description="Última lectura de cada tipo (ambiente/suelo/válvulas/health) por dispositivo — la forma más rápida de ver qué está reportando cada uno ahora mismo.",
-    parameters=[_API_KEY_HEADER],
+    auth=_SECURITY,
     responses={200: ResumenDispositivoSerializer(many=True)},
 )
 @api_view(["GET"])
@@ -338,7 +340,7 @@ def dashboard_resumen(request):
 @extend_schema(
     tags=["riego-iot"],
     summary="Resumen en vivo de un gateway puntual",
-    parameters=[_API_KEY_HEADER],
+    auth=_SECURITY,
     responses={200: _RESUMEN_RESPONSE, 404: OpenApiResponse(description="No existe ese device_id.")},
 )
 @api_view(["GET"])
@@ -362,6 +364,7 @@ def _rango_fechas(request):
     tags=["riego-iot"],
     summary="Histórico de lecturas de ambiente (temperatura/humedad) de un gateway",
     parameters=_LECTURA_QUERY_PARAMS,
+    auth=_SECURITY,
     responses={200: inline_serializer("LecturaAmbienteItem", {
         "medido_en": serializers.DateTimeField(), "temperatura": serializers.FloatField(allow_null=True),
         "humedad": serializers.FloatField(allow_null=True), "dev_eui": serializers.CharField(allow_null=True),
@@ -389,6 +392,7 @@ def lecturas_ambiente_dispositivo(request, device_id):
     tags=["riego-iot"],
     summary="Histórico de lecturas de suelo (humedad/temperatura/conductividad) de un gateway",
     parameters=_LECTURA_QUERY_PARAMS,
+    auth=_SECURITY,
     responses={200: inline_serializer("LecturaSueloItem", {
         "medido_en": serializers.DateTimeField(), "humedad_suelo": serializers.FloatField(allow_null=True),
         "temperatura_suelo": serializers.FloatField(allow_null=True), "conductividad": serializers.FloatField(allow_null=True),
@@ -418,6 +422,7 @@ def lecturas_suelo_dispositivo(request, device_id):
     summary="Histórico de estado de válvulas de un gateway",
     description="Cada fila es un cambio/reporte de estado de las válvulas — para graficar cuándo se abrieron/cerraron y quién lo originó (auto/remoto/manual/reportado).",
     parameters=_LECTURA_QUERY_PARAMS,
+    auth=_SECURITY,
     responses={200: inline_serializer("LecturaValvulaItem", {
         "medido_en": serializers.DateTimeField(), "ro1": serializers.CharField(allow_null=True),
         "ro2": serializers.CharField(allow_null=True),
@@ -447,6 +452,7 @@ def lecturas_valvulas_dispositivo(request, device_id):
     summary="Histórico de health/conectividad reportado por un gateway",
     description="Uno por cada heartbeat/health recibido — modo de control (nube/local), si hay override manual activo, y el estado de válvulas que el propio gateway reportó en ese momento.",
     parameters=_LECTURA_QUERY_PARAMS,
+    auth=_SECURITY,
     responses={200: inline_serializer("LecturaHealthItem", {
         "medido_en": serializers.DateTimeField(),
         "mqtt_conectado": serializers.BooleanField(allow_null=True),
@@ -483,6 +489,7 @@ def lecturas_health_dispositivo(request, device_id):
         "el gateway, lo genera el broker cuando la conexión cambia)."
     ),
     parameters=_LECTURA_QUERY_PARAMS,
+    auth=_SECURITY,
     responses={200: inline_serializer("LecturaConexionItem", {
         "recibido_en": serializers.DateTimeField(),
         "estado": serializers.ChoiceField(choices=["online", "offline"]),
