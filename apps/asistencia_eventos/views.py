@@ -27,6 +27,14 @@ from apps.user_activity.permissions import IsAdminRole, IsAuthenticatedWithRole
 
 _AUTH = [TokenHeaderAuthentication]
 _ADMIN_ONLY = [IsAuthenticatedWithRole, IsAdminRole]
+# Cualquier usuario con rol asignado (no solo admin/superadmin) puede escanear, guardar, ver,
+# editar y borrar SUS PROPIOS eventos — la misma tabla que _eventos_visibles ya usa para acotar
+# "admin solo ve lo suyo" se aplica igual aquí para cualquier rol no-superadmin, así que abrir
+# el permiso no cambia el alcance de los datos, solo quita la restricción de que además haya
+# que ser admin. Se mantiene _ADMIN_ONLY en persona_detail (ficha compartida entre usuarios) y
+# en los tres endpoints de dashboard/estadisticas/excel (agregados de TODO el sistema, no
+# acotados por dueño) — esos sí deben seguir siendo solo para admin/superadmin.
+_CUALQUIER_ROL = [IsAuthenticatedWithRole]
 
 
 def _save_scan(upload_file) -> str:
@@ -36,7 +44,7 @@ def _save_scan(upload_file) -> str:
 
 @api_view(["POST"])
 @authentication_classes(_AUTH)
-@permission_classes(_ADMIN_ONLY)
+@permission_classes(_CUALQUIER_ROL)
 def scan_evento(request):
     """Paso 1: sube el PDF/imagen escaneado, corre OCR y devuelve TODO lo
     extraído (encabezado del evento + asistentes + texto crudo del OCR) para
@@ -91,7 +99,7 @@ def _parse_hora_ocr(texto):
 
 @api_view(["POST"])
 @authentication_classes(_AUTH)
-@permission_classes(_ADMIN_ONLY)
+@permission_classes(_CUALQUIER_ROL)
 def scan_bulk(request):
     """Sube y GUARDA DIRECTAMENTE varios documentos a la vez — sin el paso de revisión
     humana de /scan + /eventos. Usa tal cual lo que el motor de OCR configurado
@@ -196,7 +204,9 @@ def _crear_evento(request):
 
 
 def _eventos_visibles(request):
-    """superadmin ve todos los eventos; admin solo ve los que él mismo registró."""
+    """superadmin ve todos los eventos; cualquier otro rol (admin o user) solo ve los que él
+    mismo registró — este filtro es lo que hace seguro abrir scan/eventos a cualquier usuario
+    con rol asignado (ver _CUALQUIER_ROL) en vez de restringirlo a admin/superadmin."""
     eventos = Evento.objects.select_related("registrado_por", "editado_por").order_by("-fecha", "-id")
     if request.user.role != "superadmin":
         eventos = eventos.filter(registrado_por=request.user)
@@ -223,7 +233,7 @@ def _listar_eventos(request):
 
 @api_view(["GET", "POST"])
 @authentication_classes(_AUTH)
-@permission_classes(_ADMIN_ONLY)
+@permission_classes(_CUALQUIER_ROL)
 def eventos_list_create(request):
     if request.method == "POST":
         return _crear_evento(request)
@@ -306,12 +316,12 @@ def persona_detail(request, numero_documento: str):
 
 @api_view(["PUT", "DELETE"])
 @authentication_classes(_AUTH)
-@permission_classes(_ADMIN_ONLY)
+@permission_classes(_CUALQUIER_ROL)
 def evento_asistente_detail(request, evento_id: int, numero_documento: str):
     """Corrige o retira la participación de UNA persona en UN evento puntual
     (municipio/telefono/edad de esa asistencia), sin tocar su ficha maestra ni
-    el resto del evento. Acotado igual que evento_detail: admin solo sobre
-    eventos que él mismo registró, superadmin sobre cualquiera."""
+    el resto del evento. Acotado igual que evento_detail: cualquier rol no-superadmin
+    solo sobre eventos que él mismo registró, superadmin sobre cualquiera."""
     evento = _eventos_visibles(request).filter(id=evento_id).first()
     if not evento:
         raise NotFound("Evento no encontrado")
@@ -390,7 +400,7 @@ def _obtener_evento_detail(request, evento_id: int):
 
 @api_view(["GET", "PUT", "DELETE"])
 @authentication_classes(_AUTH)
-@permission_classes(_ADMIN_ONLY)
+@permission_classes(_CUALQUIER_ROL)
 def evento_detail(request, evento_id: int):
     if request.method == "PUT":
         return _actualizar_evento(request, evento_id)

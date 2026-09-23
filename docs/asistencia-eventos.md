@@ -2,7 +2,7 @@
 
 Módulo independiente (propio `apps/asistencia_eventos`, propias tablas) para digitalizar las hojas físicas manuscritas "Formato de Asistencia" que se llenan en los eventos de AgroHub (tema, responsable, lugar, fecha, horas, y la tabla de asistentes: nombre, documento, municipio, teléfono, edad, género, pertenencia étnica).
 
-**Base URL:** `/asistencia-eventos/` — todos los endpoints requieren `Authorization: Token <token>` de un usuario con rol `admin` o `superadmin` (es la parte del flujo **web**, no la app de encuestas de campo).
+**Base URL:** `/asistencia-eventos/` — todos los endpoints requieren `Authorization: Token <token>` de un usuario **con cualquier rol asignado** (`user`, `admin` o `superadmin` — es la parte del flujo **web**, no la app de encuestas de campo). Escanear/guardar/ver/editar/borrar eventos está acotado por dueño: cada quien solo ve y toca los eventos que **él mismo** registró; un `superadmin` ve todos. Los endpoints de dashboard/estadísticas/excel y la ficha compartida de personas (`/personas/<documento>`) siguen siendo **solo admin/superadmin**, porque esos sí muestran/tocan datos de todos los usuarios.
 
 ## Requisitos del sistema (fuera de requirements.txt)
 
