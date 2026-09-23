@@ -28,12 +28,13 @@ from apps.user_activity.permissions import IsAdminRole, IsAuthenticatedWithRole
 _AUTH = [TokenHeaderAuthentication]
 _ADMIN_ONLY = [IsAuthenticatedWithRole, IsAdminRole]
 # Cualquier usuario con rol asignado (no solo admin/superadmin) puede escanear, guardar, ver,
-# editar y borrar SUS PROPIOS eventos — la misma tabla que _eventos_visibles ya usa para acotar
-# "admin solo ve lo suyo" se aplica igual aquí para cualquier rol no-superadmin, así que abrir
-# el permiso no cambia el alcance de los datos, solo quita la restricción de que además haya
-# que ser admin. Se mantiene _ADMIN_ONLY en persona_detail (ficha compartida entre usuarios) y
-# en los tres endpoints de dashboard/estadisticas/excel (agregados de TODO el sistema, no
-# acotados por dueño) — esos sí deben seguir siendo solo para admin/superadmin.
+# editar y borrar SUS PROPIOS eventos, y consultar su propio dashboard/estadisticas/excel — todo
+# acotado por dueño (ver _eventos_visibles y _usuario_scope: superadmin ve el sistema completo,
+# cualquier otro rol solo lo que él mismo registró). Abrir el permiso no cambia el alcance de
+# los datos, solo quita la restricción de que además haya que ser admin. Se mantiene _ADMIN_ONLY
+# únicamente en persona_detail — es la ficha maestra compartida entre usuarios (una persona
+# puede aparecer en eventos de cualquiera), así que editarla/borrarla no tiene un "dueño" al que
+# acotar de la misma forma.
 _CUALQUIER_ROL = [IsAuthenticatedWithRole]
 
 
@@ -409,19 +410,28 @@ def evento_detail(request, evento_id: int):
     return _obtener_evento_detail(request, evento_id)
 
 
+def _usuario_scope(request):
+    """None para superadmin (ve todo el sistema); el propio usuario para cualquier otro rol
+    (acota a lo que él mismo registró) — mismo criterio que _eventos_visibles."""
+    return None if request.user.role == "superadmin" else request.user
+
+
 @api_view(["GET"])
 @authentication_classes(_AUTH)
-@permission_classes(_ADMIN_ONLY)
+@permission_classes(_CUALQUIER_ROL)
 def dashboard_resumen(request):
-    return Response({"status": status.HTTP_200_OK, "message": "resumen", "data": services.resumen_general()})
+    data = services.resumen_general(usuario=_usuario_scope(request))
+    return Response({"status": status.HTTP_200_OK, "message": "resumen", "data": data})
 
 
 @api_view(["GET"])
 @authentication_classes(_AUTH)
-@permission_classes(_ADMIN_ONLY)
+@permission_classes(_CUALQUIER_ROL)
 def dashboard_estadisticas(request):
     evento_id = request.query_params.get("evento_id")
-    data = services.estadisticas_por_municipio(evento_id=int(evento_id) if evento_id else None)
+    data = services.estadisticas_por_municipio(
+        evento_id=int(evento_id) if evento_id else None, usuario=_usuario_scope(request)
+    )
     return Response({"status": status.HTTP_200_OK, "message": "estadisticas", "data": data})
 
 
@@ -452,7 +462,7 @@ def _formatear_libro(workbook):
 
 @api_view(["GET"])
 @authentication_classes(_AUTH)
-@permission_classes(_ADMIN_ONLY)
+@permission_classes(_CUALQUIER_ROL)
 def dashboard_excel(request):
     """Excel completo del dashboard (opcionalmente filtrado por un solo
     evento con ?evento_id=) — 4 hojas: Resumen, Estadisticas (la misma
@@ -460,11 +470,12 @@ def dashboard_excel(request):
     completo de Asistentes."""
     evento_id_param = request.query_params.get("evento_id")
     evento_id = int(evento_id_param) if evento_id_param else None
+    usuario = _usuario_scope(request)
 
-    resumen = services.resumen_general()
-    estadisticas = services.estadisticas_por_municipio(evento_id=evento_id)
-    eventos = services.eventos_para_export(evento_id=evento_id)
-    asistentes = services.asistentes_para_export(evento_id=evento_id)
+    resumen = services.resumen_general(usuario=usuario)
+    estadisticas = services.estadisticas_por_municipio(evento_id=evento_id, usuario=usuario)
+    eventos = services.eventos_para_export(evento_id=evento_id, usuario=usuario)
+    asistentes = services.asistentes_para_export(evento_id=evento_id, usuario=usuario)
 
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
