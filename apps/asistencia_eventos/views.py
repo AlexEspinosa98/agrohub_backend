@@ -14,9 +14,14 @@ from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
 
 from apps.asistencia_eventos import services
-from apps.asistencia_eventos.models import Evento, PersonaAsistente
+from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia
 from apps.asistencia_eventos.ocr_service import extract_asistencia
-from apps.asistencia_eventos.serializers import EventoConfirmSerializer
+from apps.asistencia_eventos.serializers import (
+    EventoConfirmSerializer,
+    EventoHeaderUpdateSerializer,
+    PersonaUpdateSerializer,
+    RegistroAsistenciaUpdateSerializer,
+)
 from apps.user_activity.authentication import TokenHeaderAuthentication
 from apps.user_activity.permissions import IsAdminRole, IsAuthenticatedWithRole
 
@@ -128,7 +133,9 @@ def scan_bulk(request):
             data = serializer.validated_data
 
             documento_path = _save_scan(upload)
-            evento = services.guardar_evento(data, documento_path, extracted.get("texto_crudo_ocr"))
+            evento = services.guardar_evento(
+                data, documento_path, extracted.get("texto_crudo_ocr"), registrado_por=request.user
+            )
             resultados.append(
                 {
                     "archivo": upload.name,
@@ -177,7 +184,7 @@ def _crear_evento(request):
     documento_path = _save_scan(upload) if upload else None
     texto_crudo_ocr = payload.get("texto_crudo_ocr") or None
 
-    evento = services.guardar_evento(data, documento_path, texto_crudo_ocr)
+    evento = services.guardar_evento(data, documento_path, texto_crudo_ocr, registrado_por=request.user)
     return Response(
         {
             "status": status.HTTP_201_CREATED,
@@ -188,8 +195,16 @@ def _crear_evento(request):
     )
 
 
+def _eventos_visibles(request):
+    """superadmin ve todos los eventos; admin solo ve los que él mismo registró."""
+    eventos = Evento.objects.select_related("registrado_por", "editado_por").order_by("-fecha", "-id")
+    if request.user.role != "superadmin":
+        eventos = eventos.filter(registrado_por=request.user)
+    return eventos
+
+
 def _listar_eventos(request):
-    eventos = Evento.objects.order_by("-fecha", "-id")
+    eventos = _eventos_visibles(request)
     data = [
         {
             "id": e.id,
@@ -198,6 +213,8 @@ def _listar_eventos(request):
             "lugar": e.lugar,
             "fecha": e.fecha,
             "total_asistentes": e.asistentes.count(),
+            "registrado_por": e.registrado_por.name if e.registrado_por else None,
+            "editado_por": e.editado_por.name if e.editado_por else None,
         }
         for e in eventos
     ]
@@ -213,11 +230,124 @@ def eventos_list_create(request):
     return _listar_eventos(request)
 
 
-@api_view(["GET"])
+def _actualizar_evento(request, evento_id: int):
+    """Edición parcial del encabezado del evento — solo se aplican los campos
+    que vienen en el body; no toca la lista de asistentes (eso se maneja
+    persona por persona en evento_asistente_detail)."""
+    evento = _eventos_visibles(request).filter(id=evento_id).first()
+    if not evento:
+        raise NotFound("Evento no encontrado")
+
+    serializer = EventoHeaderUpdateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    evento = services.actualizar_evento_header(evento, serializer.validated_data, editado_por=request.user)
+    return Response(
+        {
+            "status": status.HTTP_200_OK,
+            "message": "evento actualizado",
+            "data": {
+                "id": evento.id,
+                "tema": evento.tema,
+                "responsable": evento.responsable,
+                "lugar": evento.lugar,
+                "fecha": evento.fecha,
+                "hora_inicio": evento.hora_inicio,
+                "hora_final": evento.hora_final,
+            },
+        }
+    )
+
+
+def _eliminar_evento(request, evento_id: int):
+    evento = _eventos_visibles(request).filter(id=evento_id).first()
+    if not evento:
+        raise NotFound("Evento no encontrado")
+    services.eliminar_evento(evento)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["GET", "PUT", "DELETE"])
 @authentication_classes(_AUTH)
 @permission_classes(_ADMIN_ONLY)
-def evento_detail(request, evento_id: int):
-    evento = Evento.objects.filter(id=evento_id).first()
+def persona_detail(request, numero_documento: str):
+    """Ficha maestra de una persona — GET trae sus datos + eventos donde
+    participó, PUT corrige nombre/tipo_documento/genero/pertenencia_etnica
+    (edición parcial), DELETE la elimina en cascada con toda su participación
+    en eventos. No está acotado por `registrado_por`: una persona puede
+    aparecer en eventos de distintos admins, así que su ficha es compartida."""
+    persona = PersonaAsistente.objects.filter(numero_documento=numero_documento).first()
+    if not persona:
+        raise NotFound("Persona no encontrada")
+
+    if request.method == "DELETE":
+        services.eliminar_persona(persona)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    if request.method == "PUT":
+        serializer = PersonaUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        persona = services.actualizar_persona(persona, serializer.validated_data)
+
+    return Response(
+        {
+            "status": status.HTTP_200_OK,
+            "message": "persona",
+            "data": {
+                "tipo_documento": persona.tipo_documento,
+                "numero_documento": persona.numero_documento,
+                "nombre": persona.nombre,
+                "genero": persona.genero,
+                "pertenencia_etnica": persona.pertenencia_etnica,
+                "eventos": services.eventos_de_persona(persona),
+            },
+        }
+    )
+
+
+@api_view(["PUT", "DELETE"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def evento_asistente_detail(request, evento_id: int, numero_documento: str):
+    """Corrige o retira la participación de UNA persona en UN evento puntual
+    (municipio/telefono/edad de esa asistencia), sin tocar su ficha maestra ni
+    el resto del evento. Acotado igual que evento_detail: admin solo sobre
+    eventos que él mismo registró, superadmin sobre cualquiera."""
+    evento = _eventos_visibles(request).filter(id=evento_id).first()
+    if not evento:
+        raise NotFound("Evento no encontrado")
+
+    registro = (
+        RegistroAsistencia.objects.select_related("persona")
+        .filter(evento=evento, persona__numero_documento=numero_documento)
+        .first()
+    )
+    if not registro:
+        raise NotFound("Esa persona no está registrada en este evento")
+
+    if request.method == "DELETE":
+        services.eliminar_registro_asistencia(registro)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    serializer = RegistroAsistenciaUpdateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    registro = services.actualizar_registro_asistencia(registro, serializer.validated_data)
+    return Response(
+        {
+            "status": status.HTTP_200_OK,
+            "message": "asistencia actualizada",
+            "data": {
+                "evento_id": evento.id,
+                "numero_documento": registro.persona.numero_documento,
+                "municipio": registro.municipio,
+                "telefono": registro.telefono,
+                "edad": registro.edad,
+            },
+        }
+    )
+
+
+def _obtener_evento_detail(request, evento_id: int):
+    evento = _eventos_visibles(request).filter(id=evento_id).first()
     if not evento:
         raise NotFound("Evento no encontrado")
 
@@ -249,10 +379,24 @@ def evento_detail(request, evento_id: int):
                 "documento_escaneado": (
                     default_storage.url(evento.documento_escaneado) if evento.documento_escaneado else None
                 ),
+                "registrado_por": evento.registrado_por.name if evento.registrado_por else None,
+                "editado_por": evento.editado_por.name if evento.editado_por else None,
+                "actualizado_en": evento.updated_at,
                 "asistentes": asistentes,
             },
         }
     )
+
+
+@api_view(["GET", "PUT", "DELETE"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def evento_detail(request, evento_id: int):
+    if request.method == "PUT":
+        return _actualizar_evento(request, evento_id)
+    if request.method == "DELETE":
+        return _eliminar_evento(request, evento_id)
+    return _obtener_evento_detail(request, evento_id)
 
 
 @api_view(["GET"])
@@ -328,7 +472,18 @@ def dashboard_excel(request):
         df_stats.columns = etiquetas_stats
         df_stats.to_excel(writer, index=False, sheet_name="Estadisticas")
 
-        columnas_eventos = ["id", "tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final", "total_asistentes"]
+        columnas_eventos = [
+            "id",
+            "tema",
+            "responsable",
+            "lugar",
+            "fecha",
+            "hora_inicio",
+            "hora_final",
+            "total_asistentes",
+            "registrado_por",
+            "editado_por",
+        ]
         pd.DataFrame(eventos, columns=columnas_eventos).to_excel(writer, index=False, sheet_name="Eventos")
 
         columnas_asistentes = [

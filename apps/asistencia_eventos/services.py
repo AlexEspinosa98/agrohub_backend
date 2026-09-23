@@ -30,7 +30,12 @@ def _upsert_persona(numero_documento, tipo_documento, nombre, genero, pertenenci
 
 
 @transaction.atomic
-def guardar_evento(data: dict, documento_escaneado: str | None, texto_crudo_ocr: str | None) -> Evento:
+def guardar_evento(
+    data: dict,
+    documento_escaneado: str | None,
+    texto_crudo_ocr: str | None,
+    registrado_por=None,
+) -> Evento:
     evento = Evento.objects.create(
         tema=data["tema"],
         responsable=data.get("responsable"),
@@ -40,6 +45,7 @@ def guardar_evento(data: dict, documento_escaneado: str | None, texto_crudo_ocr:
         hora_final=data.get("hora_final"),
         documento_escaneado=documento_escaneado,
         texto_crudo_ocr=texto_crudo_ocr,
+        registrado_por=registrado_por,
     )
     for row in data["asistentes"]:
         persona = _upsert_persona(
@@ -59,6 +65,87 @@ def guardar_evento(data: dict, documento_escaneado: str | None, texto_crudo_ocr:
             },
         )
     return evento
+
+
+_CAMPOS_EVENTO_EDITABLES = ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final")
+
+
+def actualizar_evento_header(evento: Evento, data: dict, editado_por=None) -> Evento:
+    """Corrige los datos del encabezado del evento — solo toca los campos que
+    vienen en `data` (edición parcial), sin tocar su lista de asistentes."""
+    for campo in _CAMPOS_EVENTO_EDITABLES:
+        if campo in data:
+            setattr(evento, campo, data[campo])
+    evento.editado_por = editado_por
+    evento.save()
+    return evento
+
+
+def eliminar_evento(evento: Evento) -> None:
+    """Borra el evento y en cascada sus registros de asistencia (RegistroAsistencia
+    tiene on_delete=CASCADE). Las personas en PersonaAsistente NO se tocan — es la
+    tabla maestra compartida entre eventos."""
+    evento.delete()
+
+
+_CAMPOS_PERSONA_EDITABLES = ("tipo_documento", "nombre", "genero", "pertenencia_etnica")
+
+
+def actualizar_persona(persona: PersonaAsistente, data: dict) -> PersonaAsistente:
+    """Corrige la ficha maestra de una persona (ej. el OCR leyó mal el nombre) —
+    solo toca los campos que vienen en `data`. No afecta sus registros de
+    asistencia en los eventos donde ya participó."""
+    changed_fields = [campo for campo in _CAMPOS_PERSONA_EDITABLES if campo in data]
+    for campo in changed_fields:
+        setattr(persona, campo, data[campo])
+    if changed_fields:
+        persona.save(update_fields=changed_fields)
+    return persona
+
+
+def eliminar_persona(persona: PersonaAsistente) -> None:
+    """Elimina a la persona por completo, en cascada con su participación en
+    todos los eventos donde aparece (RegistroAsistencia.persona es CASCADE) —
+    es la operación más amplia de las tres de edición/eliminación."""
+    persona.delete()
+
+
+def eventos_de_persona(persona: PersonaAsistente) -> list:
+    qs = RegistroAsistencia.objects.select_related("evento").filter(persona=persona).order_by(
+        "-evento__fecha", "-evento_id"
+    )
+    return [
+        {
+            "evento_id": r.evento_id,
+            "tema": r.evento.tema,
+            "fecha": r.evento.fecha,
+            "municipio": r.municipio,
+            "telefono": r.telefono,
+            "edad": r.edad,
+        }
+        for r in qs
+    ]
+
+
+_CAMPOS_ASISTENCIA_EDITABLES = ("municipio", "telefono", "edad")
+
+
+def actualizar_registro_asistencia(registro: RegistroAsistencia, data: dict) -> RegistroAsistencia:
+    """Corrige la participación de una persona en un evento puntual (municipio/
+    teléfono/edad de esa asistencia específica) sin tocar su ficha maestra ni el
+    resto del evento — la operación más quirúrgica de las tres."""
+    changed_fields = [campo for campo in _CAMPOS_ASISTENCIA_EDITABLES if campo in data]
+    for campo in changed_fields:
+        setattr(registro, campo, data[campo])
+    if changed_fields:
+        registro.save(update_fields=changed_fields)
+    return registro
+
+
+def eliminar_registro_asistencia(registro: RegistroAsistencia) -> None:
+    """Retira a esa persona de ese evento puntual, sin tocar su ficha maestra
+    (PersonaAsistente) ni su participación en otros eventos."""
+    registro.delete()
 
 
 def resumen_general() -> dict:
@@ -118,7 +205,7 @@ def estadisticas_por_municipio(evento_id=None) -> list:
 
 
 def eventos_para_export(evento_id=None) -> list:
-    qs = Evento.objects.order_by("-fecha", "-id")
+    qs = Evento.objects.select_related("registrado_por", "editado_por").order_by("-fecha", "-id")
     if evento_id:
         qs = qs.filter(id=evento_id)
     return [
@@ -131,6 +218,8 @@ def eventos_para_export(evento_id=None) -> list:
             "hora_inicio": e.hora_inicio,
             "hora_final": e.hora_final,
             "total_asistentes": e.asistentes.count(),
+            "registrado_por": e.registrado_por.name if e.registrado_por else None,
+            "editado_por": e.editado_por.name if e.editado_por else None,
         }
         for e in qs
     ]

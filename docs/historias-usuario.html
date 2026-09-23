@@ -1,0 +1,1547 @@
+<title>Historias de Usuario AgroHub</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
+
+  :root{
+    --paper:#F5F6F1;
+    --surface:#FFFFFF;
+    --ink:#182019;
+    --ink-soft:#4B5A4F;
+    --ink-faint:#7C8A7E;
+    --line:#DDE2D5;
+    --accent-app:#8A5A34;
+    --accent-app-bg:#F1E6DA;
+    --accent-web:#1F6D4A;
+    --accent-web-bg:#DFEDE3;
+    --accent-shared:#2C6E8C;
+    --accent-shared-bg:#DFEAF0;
+    --m-get:#2C6E8C; --m-get-bg:#E3EEF3;
+    --m-post:#1F6D4A; --m-post-bg:#DFEDE3;
+    --m-put:#9A6B1E; --m-put-bg:#F3E9D3;
+    --m-delete:#A23B2E; --m-delete-bg:#F4E0DC;
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#12160F;
+      --surface:#181D14;
+      --ink:#E9ECE2;
+      --ink-soft:#AAB5A3;
+      --ink-faint:#7D8A78;
+      --line:#2B3325;
+      --accent-app:#D19A6A;
+      --accent-app-bg:#3A2C1C;
+      --accent-web:#57C08A;
+      --accent-web-bg:#1E3227;
+      --accent-shared:#7EC1DE;
+      --accent-shared-bg:#1D2E36;
+      --m-get:#7EC1DE; --m-get-bg:#1D2E36;
+      --m-post:#57C08A; --m-post-bg:#1E3227;
+      --m-put:#E0B461; --m-put-bg:#3A2E17;
+      --m-delete:#E28A79; --m-delete-bg:#3B2420;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#12160F;
+    --surface:#181D14;
+    --ink:#E9ECE2;
+    --ink-soft:#AAB5A3;
+    --ink-faint:#7D8A78;
+    --line:#2B3325;
+    --accent-app:#D19A6A;
+    --accent-app-bg:#3A2C1C;
+    --accent-web:#57C08A;
+    --accent-web-bg:#1E3227;
+    --accent-shared:#7EC1DE;
+    --accent-shared-bg:#1D2E36;
+    --m-get:#7EC1DE; --m-get-bg:#1D2E36;
+    --m-post:#57C08A; --m-post-bg:#1E3227;
+    --m-put:#E0B461; --m-put-bg:#3A2E17;
+    --m-delete:#E28A79; --m-delete-bg:#3B2420;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    font-size:15.5px;
+    line-height:1.6;
+  }
+  h1,h2,h3,.serif{ font-family:'Newsreader',Georgia,serif; text-wrap:balance; }
+
+  a{ color:inherit; }
+
+  .shell{
+    max-width:1180px;
+    margin:0 auto;
+    padding-inline:24px;
+    padding-block:40px 80px;
+    display:grid;
+    grid-template-columns:220px minmax(0,1fr);
+    gap:48px;
+  }
+  @media (max-width:860px){
+    .shell{ grid-template-columns:1fr; gap:28px; }
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead{
+    grid-column:1 / -1;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+    padding-bottom:28px;
+    border-bottom:1px solid var(--line);
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+  }
+  .masthead h1{
+    margin:0;
+    font-size:clamp(2.1rem, 4vw, 3.1rem);
+    font-weight:600;
+    line-height:1.05;
+  }
+  .masthead .lede{
+    max-width:66ch;
+    color:var(--ink-soft);
+    font-size:1.02rem;
+  }
+  .masthead .lede code{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:.92em;
+    background:var(--surface);
+    border:1px solid var(--line);
+    padding:.05em .35em;
+    border-radius:4px;
+  }
+
+  .stat-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    margin-top:4px;
+  }
+  .stat{
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    padding:10px 16px;
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:10px;
+    min-width:108px;
+  }
+  .stat b{ font-family:'Newsreader',serif; font-size:1.5rem; font-weight:600; font-variant-numeric:tabular-nums; }
+  .stat span{ font-size:11.5px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.06em; }
+
+  .legend{
+    display:flex; flex-wrap:wrap; gap:16px; margin-top:6px;
+  }
+  .legend-item{ display:flex; align-items:center; gap:8px; font-size:13px; color:var(--ink-soft); }
+  .swatch{ width:11px; height:11px; border-radius:3px; flex:none; }
+  .swatch.app{ background:var(--accent-app); }
+  .swatch.web{ background:var(--accent-web); }
+  .swatch.shared{ background:var(--accent-shared); }
+
+  /* ---------- Sidebar nav ---------- */
+  nav.toc{
+    position:sticky;
+    top:24px;
+    align-self:start;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+    font-size:13.5px;
+  }
+  nav.toc .toc-flow{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11px;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin:16px 0 6px;
+  }
+  nav.toc .toc-flow:first-child{ margin-top:0; }
+  nav.toc a{
+    text-decoration:none;
+    color:var(--ink-soft);
+    padding:5px 10px;
+    border-radius:6px;
+    border-left:2px solid transparent;
+  }
+  nav.toc a:hover{ background:var(--surface); color:var(--ink); }
+  nav.toc a.app{ border-left-color:var(--accent-app); }
+  nav.toc a.web{ border-left-color:var(--accent-web); }
+  nav.toc a.shared{ border-left-color:var(--accent-shared); }
+
+  @media (max-width:860px){
+    nav.toc{
+      position:static;
+      flex-direction:row;
+      flex-wrap:wrap;
+      gap:6px;
+      padding-bottom:6px;
+      border-bottom:1px solid var(--line);
+    }
+    nav.toc .toc-flow{ display:none; }
+    nav.toc a{ background:var(--surface); border:1px solid var(--line); border-left:1px solid var(--line); }
+  }
+
+  /* ---------- Main content ---------- */
+  main{ min-width:0; display:flex; flex-direction:column; gap:56px; }
+
+  .flow-section h2{
+    display:flex;
+    align-items:baseline;
+    gap:12px;
+    font-size:1.7rem;
+    font-weight:600;
+    margin:0 0 6px;
+  }
+  .flow-section h2 .tag{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    letter-spacing:.08em;
+    padding:3px 9px;
+    border-radius:999px;
+    text-transform:uppercase;
+    font-weight:600;
+  }
+  .flow-app h2 .tag{ background:var(--accent-app-bg); color:var(--accent-app); }
+  .flow-web h2 .tag{ background:var(--accent-web-bg); color:var(--accent-web); }
+  .flow-shared h2 .tag{ background:var(--accent-shared-bg); color:var(--accent-shared); }
+
+  .flow-intro{ color:var(--ink-soft); max-width:70ch; margin:0 0 28px; }
+
+  .module{ margin-bottom:34px; }
+  .module:last-child{ margin-bottom:0; }
+  .module h3{
+    font-size:12px;
+    font-family:'IBM Plex Mono',monospace;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    font-weight:600;
+    margin:0 0 14px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--line);
+  }
+
+  .story-list{ display:flex; flex-direction:column; }
+  .story{
+    display:grid;
+    grid-template-columns:3px 1fr;
+    gap:18px;
+    padding:16px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .story:last-child{ border-bottom:none; }
+  .story-bar{ border-radius:2px; }
+  .flow-app .story-bar{ background:var(--accent-app); }
+  .flow-web .story-bar{ background:var(--accent-web); }
+  .flow-shared .story-bar{ background:var(--accent-shared); }
+
+  .story-head{
+    display:flex;
+    align-items:baseline;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:5px;
+  }
+  .story-code{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--ink-faint);
+    letter-spacing:.03em;
+  }
+  .story h4{
+    margin:0;
+    font-family:'Newsreader',serif;
+    font-weight:600;
+    font-size:1.12rem;
+  }
+  .story p{ margin:0 0 10px; color:var(--ink-soft); max-width:72ch; }
+
+  .endpoints{ display:flex; flex-wrap:wrap; gap:7px; margin-bottom:8px; }
+  .ep{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    padding:3px 9px;
+    border-radius:6px;
+    display:inline-flex;
+    gap:7px;
+    align-items:center;
+    white-space:nowrap;
+  }
+  .ep b{ font-weight:600; }
+  .ep.get{ background:var(--m-get-bg); color:var(--m-get); }
+  .ep.post{ background:var(--m-post-bg); color:var(--m-post); }
+  .ep.put{ background:var(--m-put-bg); color:var(--m-put); }
+  .ep.delete{ background:var(--m-delete-bg); color:var(--m-delete); }
+  .ep-note{ font-family:'IBM Plex Sans',sans-serif; font-size:12.5px; color:var(--ink-faint); }
+
+  .criteria{
+    margin:0;
+    padding-left:0;
+    list-style:none;
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    font-size:13.5px;
+    color:var(--ink-faint);
+    max-width:72ch;
+  }
+  .criteria li{ padding-left:1.1em; position:relative; }
+  .criteria li::before{ content:"→"; position:absolute; left:0; color:var(--ink-faint); }
+  .criteria code{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:.95em;
+    background:var(--surface);
+    border:1px solid var(--line);
+    padding:.03em .32em;
+    border-radius:4px;
+    color:var(--ink-soft);
+  }
+  .story p code{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:.92em;
+    background:var(--surface);
+    border:1px solid var(--line);
+    padding:.03em .32em;
+    border-radius:4px;
+  }
+
+  /* ---------- Request / response JSON ---------- */
+  .io{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:12px;
+    margin-top:10px;
+    max-width:none;
+  }
+  .io.single{ grid-template-columns:1fr; }
+  @media (max-width:700px){
+    .io{ grid-template-columns:1fr; }
+  }
+  .io-block{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:8px;
+    padding:10px 12px;
+    overflow-x:auto;
+    min-width:0;
+  }
+  .io-label{
+    display:block;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:.09em;
+    color:var(--ink-faint);
+    margin-bottom:7px;
+  }
+  .io-block pre{
+    margin:0;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    line-height:1.55;
+    white-space:pre;
+    color:var(--ink-soft);
+    tab-size:2;
+  }
+  .io-note{
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:12px;
+    color:var(--ink-faint);
+    font-style:italic;
+    margin-top:8px;
+    display:block;
+  }
+
+  footer{
+    grid-column:1/-1;
+    margin-top:8px;
+    padding-top:20px;
+    border-top:1px solid var(--line);
+    color:var(--ink-faint);
+    font-size:12.5px;
+    display:flex;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+</style>
+
+<div class="shell">
+
+  <div class="masthead">
+    <div class="eyebrow">AgroHub Magdalena · Backend Django + DRF</div>
+    <h1>Historias de usuario</h1>
+    <p class="lede">Cubre los 5 módulos del backend (<code>data_characterization</code>, <code>hub_cgsm</code>, <code>encuesta_nutricional</code>, <code>user_activity</code>, <code>asistencia_eventos</code>). Cada historia referencia el endpoint real que la implementa — incluye las últimas incorporadas: edición y eliminación de eventos, personas y asistencias puntuales.</p>
+    <div class="stat-row">
+      <div class="stat"><b>45</b><span>Historias</span></div>
+      <div class="stat"><b>5</b><span>Módulos</span></div>
+      <div class="stat"><b>2</b><span>Flujos</span></div>
+      <div class="stat"><b>18/25/2</b><span>App · Web · Transversal</span></div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><span class="swatch app"></span> Flujo APP — captura en campo</div>
+      <div class="legend-item"><span class="swatch web"></span> Flujo WEB — panel administrativo</div>
+      <div class="legend-item"><span class="swatch shared"></span> Compartido / transversal</div>
+    </div>
+  </div>
+
+  <nav class="toc">
+    <div class="toc-flow">Flujo App</div>
+    <a class="app" href="#dc">Caracterización</a>
+    <a class="app" href="#hub">Hub CGSM</a>
+    <a class="app" href="#nutri">Encuesta nutricional</a>
+    <a class="app" href="#chat">Chat / WhatsApp</a>
+    <div class="toc-flow">Flujo Web</div>
+    <a class="web" href="#auth">Auth y sesión</a>
+    <a class="web" href="#roles">Usuarios y roles</a>
+    <a class="web" href="#assoc">Asociaciones</a>
+    <a class="web" href="#bitacoras">Bitácoras</a>
+    <a class="web" href="#dash-nutri">Dashboard nutricional</a>
+    <a class="web" href="#ocr">Asistencia OCR</a>
+    <div class="toc-flow">Transversal</div>
+    <a class="shared" href="#trans">Reglas generales</a>
+  </nav>
+
+  <main>
+
+    <!-- ================= FLUJO APP ================= -->
+    <section class="flow-section flow-app">
+      <h2>Flujo App <span class="tag">Captura en campo</span></h2>
+      <p class="flow-intro">Encuestas y formularios que un promotor o encuestador llena en terreno, casi siempre sin sesión iniciada.</p>
+
+      <div class="module" id="dc">
+        <h3>data_characterization — sin autenticación, montado en la raíz</h3>
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A01</span><h4>Registrar encuesta Agrohub</h4></div>
+              <p>Como promotor de campo, quiero enviar los datos de caracterización de una organización agrohub (ubicación, actividad productiva, etc.) para que quede registrada sin necesitar una cuenta.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /surveys/</span><span class="ep-note">tipo <code>agrohub</code> — el body agrupa varias encuestas por email</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "email": "promotor@agrohub.test",
+  "surveys": [
+    {
+      "type": "agrohub",
+      "nombre_aplicador": "Carlos Pérez",
+      "fecha_aplicacion": "2026-09-10",
+      "municipio": "Fundación",
+      "vereda": "La Aurora",
+      "nombre_organizacion": "Asoproductores La Aurora",
+      "tipo_organizacion": "Asociación de productores",
+      "anio_conformacion": 2019,
+      "numero_miembros": 24,
+      "representante_legal": "Carlos Pérez",
+      "contacto": "3001234567",
+      "tipos_agricultura": "Agroecológica",
+      "cultivan_hortalizas": "Sí",
+      "latitud": "10.5231",
+      "longitud": "-74.1990"
+      // + ~25 campos opcionales más (ver EncuestaAgrohub)
+    }
+  ]
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "message": "Surveys saved successfully" }</pre></div>
+              </div>
+              <ul class="criteria"><li>Valida campo por campo contra el serializer; errores 422 devuelven <code>campo</code>/<code>valor_recibido</code>/<code>tipo_error</code> por cada dato inválido.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A02</span><h4>Registrar encuesta educativa</h4></div>
+              <p>Como promotor de campo, quiero enviar la caracterización de una institución educativa rural para que quede en el sistema.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /surveys/</span><span class="ep-note">tipo <code>educativa</code></span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "email": "promotor@agrohub.test",
+  "surveys": [
+    {
+      "type": "educativa",
+      "municipio": "Aracataca",
+      "vereda": "Sector Central",
+      "nombre_institucion": "I.E. Rural Macondo",
+      "codigo_dane": "347001000123",
+      "nombre_directivo": "Marta Gómez",
+      "tipo_institucion": "Oficial",
+      "numero_estudiantes": 210,
+      "numero_docentes": 12,
+      "tiene_huerta": true,
+      "area_huerta": 80,
+      "espacio_agrohub": true
+      // + ~20 campos opcionales más (ver EncuestaEducativa)
+    }
+  ]
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "message": "Surveys saved successfully" }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A03</span><h4>Registrar encuesta de derecho humano al alimento</h4></div>
+              <p>Como promotor de campo, quiero registrar la encuesta de caracterización de hogares sobre derecho humano a la alimentación.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /surveys/</span><span class="ep-note">tipo <code>derecho_humano_alimentario</code></span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "email": "promotor@agrohub.test",
+  "surveys": [
+    {
+      "type": "derecho_humano_alimentario",
+      "nombre_jefe_hogar": "Rosa Martínez",
+      "edad": 42,
+      "genero": "F",
+      "municipio": "El Retén",
+      "numero_miembros_hogar": 5,
+      "dedicado_agricultura": true,
+      "cobertura_necesidades": false,
+      "meses_escasez": "Junio a agosto",
+      "compra_suficiente_alimentos": false,
+      "conoce_derecho_alimentacion": true
+      // + ~20 campos opcionales más (ver EncuestaDerechoHumanoAlimentario)
+    }
+  ]
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "message": "Surveys saved successfully" }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A04</span><h4>Consultar encuestas guardadas</h4></div>
+              <p>Como miembro del equipo, quiero listar las encuestas ya registradas (de los tres tipos) para revisarlas o darles seguimiento.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /surveys/?surveyType=agrohub&amp;page=1&amp;page_size=10</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>[
+  {
+    "id": 12,
+    "type": "agrohub",
+    "email": "promotor@agrohub.test",
+    "municipio": "Fundación",
+    "nombre_organizacion": "Asoproductores La Aurora",
+    "numero_miembros": 24,
+    "fecha_creacion": "2026-09-10T14:32:10Z"
+  }
+]</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A05</span><h4>Editar una encuesta ya enviada</h4></div>
+              <p>Como promotor de campo, quiero corregir datos de una encuesta que ya envié (ej. un error de digitación) sin crear un registro nuevo.</p>
+              <div class="endpoints"><span class="ep put"><b>PUT</b> /surveys/&lt;id&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{ "type": "agrohub", "numero_miembros": 26 }</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "id": 12,
+  "type": "agrohub",
+  "numero_miembros": 26,
+  "municipio": "Fundación"
+  // ... resto de campos del registro actualizado
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A06</span><h4>Consultar ubicaciones registradas</h4></div>
+              <p>Como miembro del equipo, quiero obtener todas las ubicaciones (lat/long) de las encuestas para ubicarlas en un mapa.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /surveys/locations/</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>[
+  {
+    "type": "agrohub",
+    "latitud": "10.5231",
+    "longitud": "-74.1990",
+    "municipio": "Fundación",
+    "fecha_aplicacion": "2026-09-10"
+  }
+]</pre></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="module" id="hub">
+        <h3>hub_cgsm — sin autenticación, /hub-cgsm/</h3>
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A07</span><h4>Registrar un actor del HUB CGSM</h4></div>
+              <p>Como encuestador de campo, quiero registrar un actor (pescador, comercializador, etc. de la Ciénaga Grande) con su foto, su activo asociado y la foto del activo, para caracterizar quién participa en la cadena.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /hub-cgsm/survey/actors</span><span class="ep-note">multipart: fotografia_actor + fotografia_activo</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud — campo survey_json (multipart)</span><pre>{
+  "email": "actor@agrohub.test",
+  "nombre_completo": "Manuel Torres",
+  "rol_hub": ["pescador"],
+  "organizacion": "Asopesca Ciénaga",
+  "numero_identificacion": "1082345678",
+  "contacto": "3009876543",
+  "nombre_codigo_activo": "Canoa-04",
+  "tipo_activo": ["embarcación"],
+  "estado_activo": "activo",
+  "autorizo_datos": true
+}
+// + fotografia_actor (file), fotografia_activo (file)</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "message": "Actor survey saved successfully" }</pre></div>
+              </div>
+              <ul class="criteria"><li>Rechaza con 400 si falta cualquiera de las dos fotos.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A08</span><h4>Registrar una faena (pesca/recolección)</h4></div>
+              <p>Como encuestador de campo, quiero registrar una faena con su punto GPS inicial/final y fotos de antes/después, para dejar evidencia de la actividad productiva.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /hub-cgsm/survey/faena</span><span class="ep-note">multipart: fotografia_antes + fotografia_despues</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud — campo survey_json (multipart)</span><pre>{
+  "email": "actor@agrohub.test",
+  "tipo_faena": "Pesca artesanal",
+  "fecha_inicio": "2026-09-10 06:00",
+  "fecha_cierre": "2026-09-10 11:30",
+  "coordinador_faena": "Manuel Torres",
+  "punto_inicial_gps": "10.7231,-74.2100",
+  "punto_final_gps": "10.7300,-74.2050",
+  "numero_personas": 6,
+  "horas_trabajadas": 5.5,
+  "biomasa_humeda_kg": 120.5,
+  "checklist_bioseguridad": ["guantes", "botas"]
+}
+// + fotografia_antes (file), fotografia_despues (file)</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "message": "Faena survey saved successfully" }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A09</span><h4>Registrar un punto de acopio de biomasa</h4></div>
+              <p>Como encuestador de campo (o desde el panel web, a confirmar), quiero registrar un punto de acopio con su ubicación georreferenciada y evidencia fotográfica.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /hub-cgsm/survey/punto-acopio</span><span class="ep-note">multipart: fotografia_georreferenciada</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud — campo survey_json (multipart)</span><pre>{
+  "email": "actor@agrohub.test",
+  "nombre_referencia": "Punto Vía Palermo km 3",
+  "tipo_punto": "Acopio temporal",
+  "ubicacion": "Vereda Palermo",
+  "cantidad_humedo_kg": 300,
+  "cantidad_seco_kg": 90,
+  "numero_sacos_unidades": 12,
+  "estado_biomasa": "En proceso de secado"
+}
+// + fotografia_georreferenciada (file)</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "message": "Punto de Acopio survey saved successfully" }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A10</span><h4>Consultar y editar encuestas del HUB CGSM</h4></div>
+              <p>Como miembro del equipo, quiero listar y corregir los registros ya capturados del HUB CGSM.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /hub-cgsm/surveys/?surveyType=actores</span><span class="ep put"><b>PUT</b> /hub-cgsm/surveys/&lt;id&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Respuesta GET 200</span><pre>[
+  {
+    "id": 7,
+    "email": "actor@agrohub.test",
+    "nombre_completo": "Manuel Torres",
+    "numero_identificacion": "1082345678",
+    "estado_activo": "activo",
+    "fecha_registro": "2026-09-10T11:02:00Z"
+  }
+]</pre></div>
+                <div class="io-block"><span class="io-label">Solicitud PUT</span><pre>{ "type": "actores", "estado_activo": "inactivo" }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A11</span><h4>Endpoint heredado sin funcionalidad real</h4></div>
+              <p>Como integrador que aún llama al contrato viejo, necesito que este endpoint siga respondiendo 201 sin romper el cliente, aunque no persiste nada — stub heredado de la API FastAPI original, mantenido solo por compatibilidad.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /hub-cgsm/surveys/</span><span class="ep-note">no construir nada nuevo encima</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud (obligatorios)</span><pre>{
+  "email": "actor@agrohub.test",
+  "date_aplication": "2026-09-10",
+  "ph": "7.2",
+  "salinity": "12",
+  "dissolved_oxygen": "5.8",
+  "conductivity": "1500",
+  "temperature": "28",
+  "latitude": "10.72",
+  "longitude": "-74.21"
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>// Devuelve el mismo body recibido, sin guardar nada</pre></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="module" id="nutri">
+        <h3>encuesta_nutricional — público excepto dashboards/export, /encuesta-nutricional/</h3>
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A12</span><h4>Registrar una encuesta nutricional (ELCSA) de un hogar</h4></div>
+              <p>Como encuestador de campo, quiero registrar la encuesta de seguridad alimentaria de un hogar (hogar, hábitos, ELCSA) para caracterizar su situación nutricional.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /encuesta-nutricional/</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "nombre_encuestador": "Laura Díaz",
+  "cedula_encuestador": "1082345678",
+  "fecha_aplicacion": "2026-09-10",
+  "municipio": "Fundación",
+  "vereda_comunidad": "La Aurora",
+  "num_personas_hogar": 5,
+  "hay_menores_18": true,
+  "dias_frutas": 3,
+  "dias_verduras": 4,
+  "comidas_por_dia": "3",
+  "preocupacion_alimentos_acabaran": true,
+  "puntaje_inseguridad_alimentaria": 2,
+  "clasificacion_seguridad_alimentaria": "inseguridad leve",
+  "consentimiento_informado": true,
+  "miembros": [
+    {
+      "cedula_participante": "1129384756",
+      "nombre_participante": "Rosa Martínez",
+      "edad_anios": 34,
+      "sexo": "F",
+      "peso_kg": 61.5,
+      "talla_cm": 158,
+      "imc_calculado": 24.6
+    }
+  ]
+  // + ~15 campos opcionales más (ver EncuestaNutricionalCreateSerializer)
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{
+  "status": 201,
+  "message": "encuesta registrada",
+  "data": {
+    "id": 45,
+    "numero_encuesta": "SAN-20260910-000045",
+    "miembros_creados": 1
+  }
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A13</span><h4>Agregar miembros del hogar con datos antropométricos</h4></div>
+              <p>Como encuestador de campo, quiero agregar cada integrante del hogar (cédula, edad, peso, talla, perímetro braquial) a una encuesta ya creada.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /encuesta-nutricional/&lt;numero_encuesta&gt;/miembros</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "cedula_participante": "1129384757",
+  "nombre_participante": "Juan Martínez",
+  "edad_anios": 8,
+  "sexo": "M",
+  "peso_kg": 24.3,
+  "talla_cm": 121,
+  "perimetro_brazo_cm": 15.8,
+  "grupo_perimetro_brazo": "normal"
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{
+  "status": 201,
+  "message": "miembro registrado",
+  "data": {
+    "id": 103,
+    "encuesta_id": 45,
+    "persona_id": 88,
+    "cedula_participante": "1129384757",
+    "nombre_participante": "Juan Martínez",
+    "edad_anios": 8,
+    "peso_kg": 24.3,
+    "talla_cm": 121,
+    "is_active": true
+  }
+}</pre></div>
+              </div>
+              <ul class="criteria"><li>Cada miembro se vincula a una <code>PersonaNutricional</code> maestra por cédula — si ya existe, se actualiza en vez de duplicarse.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A14</span><h4>Consultar, editar o retirar un miembro</h4></div>
+              <p>Como encuestador, quiero corregir o dar de baja (soft-delete) un miembro que agregué por error.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b></span><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /encuesta-nutricional/&lt;numero_encuesta&gt;/miembros/&lt;miembro_id&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud PUT</span><pre>{ "peso_kg": 25.1 }</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta DELETE 200</span><pre>{ "status": 200, "message": "miembro eliminado" }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A15</span><h4>Consultar/editar/retirar una encuesta completa</h4></div>
+              <p>Como miembro del equipo, quiero consultar, corregir o dar de baja una encuesta nutricional completa.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b></span><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /encuesta-nutricional/&lt;numero_encuesta&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Respuesta GET 200</span><pre>{
+  "status": 200,
+  "message": "encuesta encontrada",
+  "data": {
+    "id": 45,
+    "numero_encuesta": "SAN-20260910-000045",
+    "municipio": "Fundación",
+    "vereda_comunidad": "La Aurora",
+    "miembros": [ { "id": 103, "nombre_participante": "Juan Martínez", "..." : "..." } ]
+  }
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta DELETE 200</span><pre>{ "status": 200, "message": "encuesta eliminada" }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A16</span><h4>Listar encuestas nutricionales</h4></div>
+              <p>Como miembro del equipo, quiero ver todas las encuestas nutricionales registradas.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /encuesta-nutricional/?municipio=Fundación</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "encuestas encontradas",
+  "data": [
+    {
+      "numero_encuesta": "SAN-20260910-000045",
+      "nombre_encuestador": "Laura Díaz",
+      "municipio": "Fundación",
+      "vereda_comunidad": "La Aurora",
+      "total_miembros": 4
+    }
+  ]
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A17</span><h4>Buscar una persona por cédula o id</h4></div>
+              <p>Como encuestador, quiero consultar si una persona ya tiene historial nutricional antes de registrarla de nuevo, para no duplicar su ficha.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /encuesta-nutricional/personas/1129384756</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "participante encontrado",
+  "data": {
+    "id": 88,
+    "cedula": "1129384756",
+    "nombre": "Rosa Martínez",
+    "edad_anios": 34,
+    "sexo": "F",
+    "is_active": true
+  }
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="module" id="chat">
+        <h3>user_activity — canal conversacional (parte del flujo app)</h3>
+        <div class="story-list">
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-A18</span><h4>Registrar una bitácora conversando con un asistente</h4></div>
+              <p>Como usuario de campo, quiero contarle a un asistente (por chat o WhatsApp) qué actividad realicé en lenguaje natural, y que él arme y guarde la bitácora, sin llenar un formulario.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /user-activity/chat</span><span class="ep post"><b>POST</b> /user-activity/whatsapp</span><span class="ep-note">webhook Meta Business API, mismo motor</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud (/chat)</span><pre>{
+  "message": "Hoy sembré maíz con la asociación La Aurora",
+  "session_id": null
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 200 — sin envolver en status/data</span><pre>{
+  "reply": "✅ Bitácora registrada exitosamente...",
+  "session_id": "7e2f1c9a-...-b3d2",
+  "logbook_created": {
+    "id": 210,
+    "title": "Siembra de maíz",
+    "description": "Siembra de maíz con la asociación La Aurora",
+    "activity_date": "2026-09-10",
+    "association_id": 3,
+    "association_name": "Asoproductores La Aurora"
+  }
+}</pre></div>
+              </div>
+              <ul class="criteria"><li>El asistente pide título/descripción/fecha/asociación si faltan, y solo emite el bloque <code>&lt;BITACORA&gt;</code> con los 4 datos completos; confirma con un resumen legible.</li></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FLUJO WEB ================= -->
+    <section class="flow-section flow-web">
+      <h2>Flujo Web <span class="tag">Panel administrativo</span></h2>
+      <p class="flow-intro">Gestión de usuarios, roles, bitácoras, dashboards y el módulo de OCR — siempre con <code>Authorization: Token</code>.</p>
+
+      <div class="module" id="auth">
+        <h3>Autenticación y sesión — user_activity, compartido con la app</h3>
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W01</span><h4>Registrarme como nuevo usuario</h4></div>
+              <p>Como persona nueva del equipo, quiero crear mi cuenta para loguearme después, aunque quede sin permisos hasta que un superadmin me asigne un rol.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /user-activity/users/register</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "name": "Manuel Torres",
+  "phone": "3009876543",
+  "identification": "1082345678",
+  "email": "manuel@agrohub.test",
+  "password": "MiClave2026!",
+  "association_id": 3
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "status": 201, "message": "usuario creado", "data": null }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W02</span><h4>Iniciar sesión desde la app o la web con la misma cuenta</h4></div>
+              <p>Como usuario, quiero loguearme indicando si es desde la app o la web, y que ambas sesiones convivan sin que una cierre la otra.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /user-activity/users/login</span><span class="ep-note">campo opcional platform: "app" / "web"</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "phone_or_identification": "3009876543",
+  "password": "MiClave2026!",
+  "platform": "web"
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "login ok",
+  "data": {
+    "token": "d2556c5b-b322-4e68-ae74-82f9a396d1da",
+    "role": "admin",
+    "name": "Manuel Torres",
+    "email": "manuel@agrohub.test"
+  }
+}</pre></div>
+              </div>
+              <ul class="criteria"><li>Un segundo login con el mismo <code>platform</code> reemplaza solo esa sesión; loguear en la otra plataforma no la afecta.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W03</span><h4>Cerrar sesión</h4></div>
+              <p>Como usuario, quiero cerrar mi sesión activa (de una sola plataforma) sin afectar la que tengo abierta en la otra.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /user-activity/users/logout</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200 — sin cuerpo de solicitud</span><pre>{ "status": 200, "message": "sesión cerrada", "data": null }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W04</span><h4>Recuperar contraseña olvidada por correo (OTP)</h4></div>
+              <p>Como usuario que olvidó su contraseña, quiero pedir un código de 6 dígitos a mi correo y usarlo para definir una nueva, sin sesión activa.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /user-activity/users/forgot-password</span><span class="ep post"><b>POST</b> /user-activity/users/reset-password</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud forgot-password</span><pre>{ "email": "manuel@agrohub.test" }</pre></div>
+                <div class="io-block"><span class="io-label">Solicitud reset-password</span><pre>{
+  "email": "manuel@agrohub.test",
+  "otp": "482913",
+  "new_password": "NuevaClave2026!"
+}</pre></div>
+              </div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta (ambos) 200</span><pre>{ "status": 200, "message": "contraseña actualizada", "data": null }</pre></div>
+              </div>
+              <ul class="criteria"><li>El código expira en 10 minutos, es de un solo uso, y al usarlo se cierran <strong>todas</strong> las sesiones activas del usuario.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W05</span><h4>Bootstrap del primer superadmin</h4></div>
+              <p>Como quien despliega el servidor, quiero crear la primera cuenta superadmin usando un secreto de servidor, no una sesión de usuario.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /user-activity/users/superadmin</span><span class="ep-note">header X-Superadmin-Token</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "name": "Superadmin AgroHub",
+  "phone": "3000000000",
+  "identification": "0000000001",
+  "email": "superadmin@agrohub.test",
+  "password": "contra123"
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "status": 201, "message": "superadmin creado", "data": null }</pre></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="module" id="roles">
+        <h3>Gestión de usuarios y roles — solo superadmin/admin</h3>
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W06</span><h4>Listar todos los usuarios</h4></div>
+              <p>Como superadmin, quiero ver todos los usuarios registrados para saber a quién le falta asignar un rol.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /user-activity/users</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "usuarios",
+  "data": [
+    {
+      "id": 11,
+      "name": "Manuel Torres",
+      "phone": "3009876543",
+      "identification": "1082345678",
+      "email": "manuel@agrohub.test",
+      "association_id": 3,
+      "role": null,
+      "created_at": "2026-09-10T10:00:00Z"
+    }
+  ]
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W07</span><h4>Asignar un rol a un usuario</h4></div>
+              <p>Como superadmin, quiero asignarle un rol existente a un usuario para que deje de estar bloqueado.</p>
+              <div class="endpoints"><span class="ep put"><b>PUT</b> /user-activity/users/&lt;user_id&gt;/role</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{ "role": "editor" }</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{ "status": 200, "message": "rol asignado", "data": null }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W08</span><h4>Crear un usuario directamente desde el panel</h4></div>
+              <p>Como admin, quiero dar de alta a un usuario yo mismo (ej. sin acceso a internet en el momento) en vez de esperar a que se registre.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /user-activity/users/admin-create</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "name": "Ana Restrepo",
+  "phone": "3011122233",
+  "identification": "1099887766",
+  "password": "ClaveTemp2026!",
+  "association_id": 3,
+  "role": "user"
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "status": 201, "message": "usuario creado", "data": null }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W09</span><h4>Consultar, editar o eliminar un usuario</h4></div>
+              <p>Como admin, quiero ver el detalle de un usuario, corregir sus datos, o eliminarlo si ya no debe tener acceso.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b></span><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /user-activity/users/&lt;user_id&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud PUT</span><pre>{ "association_id": 5 }</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta GET 200</span><pre>{
+  "status": 200,
+  "message": "usuario encontrado",
+  "data": {
+    "id": 11, "name": "Manuel Torres", "phone": "3009876543",
+    "association_id": 3, "role": "editor"
+  }
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W10</span><h4>Administrar el catálogo de roles</h4></div>
+              <p>Como superadmin, quiero crear, listar, editar o eliminar roles más allá de los tres sembrados (user/admin/superadmin), para perfiles específicos del equipo.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b></span><span class="ep post"><b>POST</b> /user-activity/roles</span><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /user-activity/roles/&lt;role_id&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud POST</span><pre>{
+  "name": "editor",
+  "description": "Puede editar contenido pero no administrar usuarios"
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta GET 200</span><pre>{
+  "status": 200,
+  "message": "roles",
+  "data": [
+    { "id": 1, "name": "user", "description": "Usuario estándar" },
+    { "id": 2, "name": "admin", "description": "Administrador" },
+    { "id": 3, "name": "superadmin", "description": "Super administrador" },
+    { "id": 127, "name": "editor", "description": "Puede editar contenido..." }
+  ]
+}</pre></div>
+              </div>
+              <ul class="criteria"><li>No se puede eliminar un rol que todavía tiene usuarios asignados.</li></ul>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="module" id="assoc">
+        <h3>Asociaciones — user_activity</h3>
+        <div class="story-list">
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W11</span><h4>Administrar asociaciones</h4></div>
+              <p>Como admin, quiero crear, listar, editar y eliminar las asociaciones a las que se vincula cada usuario y cada bitácora.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b></span><span class="ep post"><b>POST</b> /user-activity/associations</span><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /user-activity/associations/&lt;id&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud POST</span><pre>{
+  "name": "Asoproductores La Aurora",
+  "latitude": 10.5231,
+  "longitude": -74.1990,
+  "department": "Magdalena",
+  "municipality": "Fundación",
+  "vereda": "La Aurora"
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta GET 200</span><pre>{
+  "status": 200,
+  "message": "asociaciones",
+  "data": [ { "id": 3, "name": "Asoproductores La Aurora", "municipality": "Fundación" } ]
+}</pre></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="module" id="bitacoras">
+        <h3>Bitácoras — user_activity</h3>
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W12</span><h4>Registrar mi bitácora desde el panel</h4></div>
+              <p>Como usuario con rol asignado, quiero registrar una bitácora (título, descripción, fecha, asociación) por formulario, sin pasar por el asistente conversacional.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /user-activity/logbooks</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud</span><pre>{
+  "title": "Siembra de maíz",
+  "description": "Siembra de maíz en el lote comunal",
+  "activity_date": "2026-09-10"
+}</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{ "status": 201, "message": "bitácora creada", "data": null }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W13</span><h4>Consultar mis bitácoras</h4></div>
+              <p>Como usuario, quiero ver el historial de bitácoras filtrado por fecha o asociación, paginado.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /user-activity/logbooks/me?start_date=2026-09-01</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "bitácoras del usuario",
+  "data": [
+    {
+      "id": 210,
+      "title": "Siembra de maíz",
+      "description": "Siembra de maíz en el lote comunal",
+      "activity_date": "2026-09-10",
+      "association_name": "Asoproductores La Aurora"
+    }
+  ]
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W14</span><h4>Editar o eliminar una bitácora</h4></div>
+              <p>Como el usuario dueño de una bitácora, quiero corregirla o eliminarla si me equivoqué.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b></span><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /user-activity/logbooks/&lt;logbook_id&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud PUT</span><pre>{ "description": "Siembra de maíz y frijol en el lote comunal" }</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta DELETE 200</span><pre>{ "status": 200, "message": "bitácora eliminada", "data": null }</pre></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="module" id="dash-nutri">
+        <h3>Dashboard nutricional — encuesta_nutricional, requiere token</h3>
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W15</span><h4>Ver el resumen por municipio</h4></div>
+              <p>Como usuario del panel, quiero ver cuántas encuestas nutricionales hay por municipio, para entender la cobertura del proyecto.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /encuesta-nutricional/dashboard/municipios</span><span class="ep get"><b>GET</b> /dashboard/municipios/&lt;municipio&gt;</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta GET /dashboard/municipios 200</span><pre>{
+  "status": 200,
+  "message": "resumen generado",
+  "data": [
+    { "municipio": "Fundación", "total_encuestas": 18, "total_miembros": 74 },
+    { "municipio": "Aracataca", "total_encuestas": 12, "total_miembros": 51 }
+  ]
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W16</span><h4>Ver el resumen por vereda</h4></div>
+              <p>Como usuario del panel, quiero ver la cobertura desagregada por vereda dentro de cada municipio.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /encuesta-nutricional/dashboard/veredas?municipio=Fundación</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "resumen generado",
+  "data": [
+    { "municipio": "Fundación", "vereda_comunidad": "La Aurora", "total_encuestas": 9, "total_miembros": 38 }
+  ]
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W17</span><h4>Exportar todas las encuestas nutricionales a Excel</h4></div>
+              <p>Como usuario del panel, quiero descargar un Excel con todas las encuestas activas, separadas por hoja de municipio, para análisis o reporte a financiadores.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /encuesta-nutricional/export/excel</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>// application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// Content-Disposition: attachment; filename=encuestas_nutricionales.xlsx
+// una hoja de cálculo por municipio</pre></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="module" id="ocr">
+        <h3>Asistencia a eventos con OCR — asistencia_eventos, solo admin/superadmin</h3>
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W18</span><h4>Digitalizar una hoja de asistencia escaneada</h4></div>
+              <p>Como responsable de un evento, quiero subir la foto/PDF de la hoja de asistencia manuscrita, y que el sistema me devuelva ya extraído el tema, responsable, lugar, fecha, horas y la lista de asistentes.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /asistencia-eventos/scan</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud — multipart: archivo</span><pre>// campo "archivo": hoja_asistencia.pdf</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "Documento escaneado — revisa y corrige antes de guardar",
+  "data": {
+    "tema": "Socialización de resultados: Agrohub del Magdalena",
+    "responsable": "John Taborda Garaldo",
+    "lugar": "Universidad del Magdalena -sta Mta",
+    "fecha": "28/08/2026",
+    "hora_inicio": "8:30 am",
+    "hora_final": "12:30 pm",
+    "asistentes": [
+      {
+        "nombre": "Jeanis Quintero",
+        "numero_documento": "1081806419",
+        "municipio": "Fundación",
+        "edad": 17,
+        "genero": "F",
+        "pertenencia_etnica": "ninguno",
+        "persona_ya_registrada": false
+      }
+    ],
+    "texto_crudo_ocr": "... texto de respaldo del OCR ..."
+  }
+}</pre></div>
+              </div>
+              <ul class="criteria"><li>No guarda nada todavía; marca qué asistentes ya existen (<code>persona_ya_registrada</code>) para avisar de un posible duplicado antes de confirmar.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W19</span><h4>Revisar, corregir y guardar el evento</h4></div>
+              <p>Como responsable de un evento, quiero corregir lo que el OCR haya leído mal (nombres, casillas de género/etnia) antes de que quede guardado en firme.</p>
+              <div class="endpoints"><span class="ep post"><b>POST</b> /asistencia-eventos/eventos</span><span class="ep-note">multipart: data (JSON corregido) + archivo</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud — campo data (multipart)</span><pre>{
+  "tema": "Socialización de resultados: Agrohub del Magdalena",
+  "responsable": "John Taborda Garaldo",
+  "lugar": "Universidad del Magdalena -sta Mta",
+  "fecha": "2026-08-28",
+  "hora_inicio": "08:30",
+  "hora_final": "12:30",
+  "asistentes": [
+    {
+      "nombre": "Jeanis Quintero",
+      "numero_documento": "1081806419",
+      "municipio": "Fundación",
+      "telefono": "3051035950",
+      "edad": 17,
+      "genero": "F",
+      "pertenencia_etnica": "ninguno"
+    }
+  ]
+}
+// + archivo (el mismo PDF/imagen, se guarda como evidencia)</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta 201</span><pre>{
+  "status": 201,
+  "message": "evento guardado",
+  "data": { "id": 1, "total_asistentes": 9 }
+}</pre></div>
+              </div>
+              <ul class="criteria"><li>Cada asistente se guarda por <em>upsert</em> de número de documento; rechaza si dos filas de la misma carga comparten documento.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W20</span><h4>Consultar, editar o eliminar un evento</h4></div>
+              <p>Como usuario del panel, quiero ver la lista de eventos y su detalle de asistencia; también corregir el encabezado (tema, responsable, lugar, fecha, horas) o eliminar el evento completo si se cargó por error.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /asistencia-eventos/eventos</span><span class="ep get"><b>GET</b></span><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /eventos/&lt;id&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud PUT</span><pre>{ "tema": "Socialización de resultados (corregido)" }</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta GET /eventos/1 200</span><pre>{
+  "status": 200,
+  "message": "evento",
+  "data": {
+    "id": 1,
+    "tema": "Socialización de resultados: Agrohub del Magdalena",
+    "fecha": "2026-08-28",
+    "documento_escaneado": "/media/asistencia_eventos/....pdf",
+    "asistentes": [
+      { "nombre": "Jeanis Quintero", "numero_documento": "1081806419", "municipio": "Fundación", "edad": 17 }
+    ]
+  }
+}</pre></div>
+              </div>
+              <ul class="criteria"><li>Eliminar un evento borra en cascada sus registros de asistencia, pero <strong>no</strong> a las personas — siguen en el sistema para otros eventos.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W20b</span><h4>Corregir o eliminar una persona</h4></div>
+              <p>Como usuario del panel, quiero corregir el nombre, tipo de documento, género o pertenencia étnica de una persona cuando el OCR (o quien digitó) se equivocó, o eliminarla del sistema si no debía existir.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b></span><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /asistencia-eventos/personas/&lt;numero_documento&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud PUT</span><pre>{ "nombre": "Jeanis Quintero Barros" }</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta GET 200</span><pre>{
+  "status": 200,
+  "message": "persona",
+  "data": {
+    "numero_documento": "1081806419",
+    "nombre": "Jeanis Quintero Barros",
+    "genero": "F",
+    "pertenencia_etnica": "ninguno",
+    "asistencias": [
+      { "evento_id": 1, "evento_tema": "Socialización de resultados...", "municipio": "Fundación", "edad": 17 }
+    ]
+  }
+}</pre></div>
+              </div>
+              <ul class="criteria"><li><code>GET</code> muestra también todos los eventos a los que asistió.</li><li>Eliminar una persona la borra en cascada de <strong>todos</strong> los eventos donde aparece — la operación más amplia del módulo, usar con cuidado.</li></ul>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W20c</span><h4>Corregir o retirar a alguien de un evento puntual</h4></div>
+              <p>Como usuario del panel, quiero corregir el municipio/teléfono/edad de una persona en un evento específico, o retirarla de ese evento, sin afectar su ficha maestra ni su historial en otros eventos.</p>
+              <div class="endpoints"><span class="ep put"><b>PUT</b></span><span class="ep delete"><b>DELETE</b> /eventos/&lt;evento_id&gt;/asistentes/&lt;numero_documento&gt;</span></div>
+              <div class="io">
+                <div class="io-block"><span class="io-label">Solicitud PUT</span><pre>{ "edad": 18 }</pre></div>
+                <div class="io-block"><span class="io-label">Respuesta DELETE 200</span><pre>{ "status": 200, "message": "asistente retirado del evento", "data": null }</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W21</span><h4>Ver el resumen general de asistencia</h4></div>
+              <p>Como usuario del panel, quiero ver de un vistazo cuántas personas únicas, cuántos eventos y cuántas asistencias totales hay registradas.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /asistencia-eventos/dashboard/resumen</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "resumen",
+  "data": { "total_personas": 9, "total_eventos": 2, "total_asistencias": 18 }
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W22</span><h4>Ver estadísticas demográficas de asistencia</h4></div>
+              <p>Como usuario del panel, quiero ver cuántos asistentes hay por municipio, género y rango de edad (0-14 / 15-19 / 20-59 / mayor de 60), con totales.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /asistencia-eventos/dashboard/estadisticas</span><span class="ep-note">opcional ?evento_id=</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>{
+  "status": 200,
+  "message": "estadisticas",
+  "data": [
+    { "municipio": "Fundación", "genero": "Femenino", "0-14": 0, "15-19": 1, "20-59": 2, "mayor de 60": 0, "total": 3 },
+    { "municipio": "Total", "genero": null, "0-14": 0, "15-19": 1, "20-59": 2, "mayor de 60": 0, "total": 3 }
+  ]
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-W23</span><h4>Descargar el dashboard completo en Excel</h4></div>
+              <p>Como usuario del panel, quiero descargar un solo Excel con el resumen, las estadísticas, el listado de eventos y el detalle de asistentes.</p>
+              <div class="endpoints"><span class="ep get"><b>GET</b> /asistencia-eventos/dashboard/excel</span><span class="ep-note">opcional ?evento_id=</span></div>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 200</span><pre>// application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+// Content-Disposition: attachment; filename=dashboard_asistencia_eventos.xlsx
+// hojas: Resumen · Estadisticas · Eventos · Asistentes</pre></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TRANSVERSAL ================= -->
+    <section class="flow-section flow-shared" id="trans">
+      <h2>Transversales <span class="tag">Reglas generales</span></h2>
+      <p class="flow-intro">No atadas a un único endpoint — aplican en todo el backend.</p>
+      <div class="module">
+        <div class="story-list">
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-T01</span><h4>Errores de validación consistentes</h4></div>
+              <p>Como integrador de un frontend, quiero que cualquier error de validación (en cualquier módulo) devuelva la misma forma, con campo, mensaje, tipo de error y valor recibido, para armar un manejo de errores genérico.</p>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 422 — cualquier módulo</span><pre>{
+  "status": 422,
+  "message": "Datos inválidos en la solicitud",
+  "total_errores": 1,
+  "errores": [
+    {
+      "campo": "numero_documento",
+      "mensaje": "Este campo es obligatorio.",
+      "tipo_error": "required",
+      "valor_recibido": null
+    }
+  ]
+}</pre></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="story">
+            <div class="story-bar"></div>
+            <div>
+              <div class="story-head"><span class="story-code">HU-T02</span><h4>Bloqueo por rol antes de asignación</h4></div>
+              <p>Como sistema, quiero que ningún usuario recién registrado use un endpoint protegido hasta que un superadmin le asigne un rol explícitamente, para que el acceso sea siempre una decisión humana, no un descuido de configuración.</p>
+              <div class="io single">
+                <div class="io-block"><span class="io-label">Respuesta 403 — usuario sin rol</span><pre>{ "detail": "Tu cuenta aún no tiene un rol asignado. Contacta a un superadmin." }</pre></div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <span>AgroHub Magdalena — backend Django + DRF</span>
+      <span>Cada historia incluye ejemplo real de solicitud y respuesta JSON</span>
+    </footer>
+
+  </main>
+</div>

@@ -35,3 +35,36 @@ class EventoConfirmSerializer(serializers.Serializer):
                 f"Documentos repetidos en la misma carga: {', '.join(sorted(duplicados))}"
             )
         return value
+
+
+class EventoHeaderUpdateSerializer(serializers.Serializer):
+    """PUT /eventos/<id> — edición parcial: solo se aplican los campos que vienen en el body."""
+
+    tema = serializers.CharField(required=False)
+    responsable = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    lugar = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    fecha = serializers.DateField(required=False, allow_null=True)
+    hora_inicio = serializers.TimeField(required=False, allow_null=True)
+    hora_final = serializers.TimeField(required=False, allow_null=True)
+
+
+class PersonaUpdateSerializer(serializers.Serializer):
+    """PUT /personas/<numero_documento> — edición parcial de la ficha maestra."""
+
+    tipo_documento = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    nombre = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    genero = serializers.ChoiceField(choices=["F", "M", "O"], required=False, allow_null=True)
+    pertenencia_etnica = serializers.ChoiceField(
+        choices=["ninguno", "indigena", "afro", "rom", "raizal"],
+        required=False,
+        allow_null=True,
+    )
+
+
+class RegistroAsistenciaUpdateSerializer(serializers.Serializer):
+    """PUT /eventos/<evento_id>/asistentes/<numero_documento> — edición parcial
+    de la participación de una persona en un evento puntual."""
+
+    municipio = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    telefono = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    edad = serializers.IntegerField(required=False, allow_null=True)

@@ -214,10 +214,14 @@ Respuesta — un resultado por archivo, en el mismo orden en que se mandaron:
   etc.) no tumba el resto del lote — queda marcado `"status": "error"` con el detalle, y los
   demás archivos se siguen procesando.
 
-## Listado y detalle
+## Listado, edición y eliminación
 
 - `GET /asistencia-eventos/eventos` — lista de eventos con conteo de asistentes.
 - `GET /asistencia-eventos/eventos/<id>` — detalle completo, incluye la URL del PDF/imagen original.
+- `PUT /asistencia-eventos/eventos/<id>` — corrige los datos del encabezado del evento (`tema`, `responsable`, `lugar`, `fecha`, `hora_inicio`, `hora_final`); solo hace falta mandar los campos que cambian.
+- `DELETE /asistencia-eventos/eventos/<id>` — elimina el evento completo, en cascada con todos sus registros de asistencia (**no** borra a las personas — quedan en el sistema para otros eventos).
+- `GET/PUT/DELETE /asistencia-eventos/personas/<numero_documento>` — ficha maestra de una persona: `GET` trae sus datos y la lista de eventos a los que asistió; `PUT` corrige nombre/tipo de documento/género/pertenencia étnica (por ejemplo cuando el OCR leyó mal el nombre); `DELETE` la elimina por completo, **en cascada con su participación en todos los eventos donde aparece** — usarlo con cuidado, es la operación más amplia de las tres.
+- `PUT/DELETE /asistencia-eventos/eventos/<evento_id>/asistentes/<numero_documento>` — corrige o retira la participación de **una** persona en **un** evento puntual (su `municipio`/`telefono`/`edad` de esa asistencia específica), sin tocar ni su ficha maestra ni el resto del evento. Es la operación más quirúrgica de las tres — úsala para "esta persona no debió quedar en este evento" sin afectar su historial en otros eventos.
 
 ## Dashboard
 

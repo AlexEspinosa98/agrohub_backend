@@ -24,6 +24,7 @@ class PersonaAsistente(models.Model):
 
 class Evento(models.Model):
     tema = models.CharField(max_length=255)
+    # Responsable del evento tal como aparece escrito en la hoja física (dato del OCR).
     responsable = models.CharField(max_length=255, null=True, blank=True)
     lugar = models.CharField(max_length=255, null=True, blank=True)
     fecha = models.DateField(null=True, blank=True)
@@ -34,7 +35,28 @@ class Evento(models.Model):
     # Texto crudo devuelto por el OCR, para poder revisar manualmente lo que
     # el parser de la tabla no haya logrado interpretar correctamente.
     texto_crudo_ocr = models.TextField(null=True, blank=True)
+    # Usuario logueado que digitalizó/guardó el evento (distinto de `responsable`,
+    # que es el nombre del responsable del evento leído del papel por el OCR).
+    registrado_por = models.ForeignKey(
+        "user_activity.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_column="registrado_por_id",
+        related_name="eventos_asistencia_registrados",
+    )
+    # Usuario logueado que hizo la última edición del evento (PUT /eventos/<id>) — None
+    # si nunca se ha editado desde que se registró.
+    editado_por = models.ForeignKey(
+        "user_activity.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_column="editado_por_id",
+        related_name="eventos_asistencia_editados",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = "eventos_asistencia"
