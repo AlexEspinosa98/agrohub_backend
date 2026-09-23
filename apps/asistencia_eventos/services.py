@@ -178,11 +178,18 @@ def _rango_edad(edad):
     return None
 
 
+_GENERO_LABELS = {"M": "Masculino", "F": "Femenino", "O": "Otro"}
+
+
 def estadisticas_por_municipio(evento_id=None, usuario=None) -> list:
     """Tabla dinámica Municipio x Género x rango de edad, igual al reporte
     de estadísticas del proyecto (columnas 0-14 / 15-19 / 20-59 / mayor de
     60 + Total, con fila Total al final). usuario=None (superadmin) -> todo el
-    sistema; cualquier otro rol solo ve sus propios eventos."""
+    sistema; cualquier otro rol solo ve sus propios eventos.
+
+    Las 3 filas de género por municipio (Masculino/Femenino/Otro) salen siempre, aunque alguna
+    quede en cero — antes "Otro" (genero="O") ni siquiera se contaba, se descartaba en silencio
+    junto con cualquier fila sin genero reconocido."""
     qs = RegistroAsistencia.objects.select_related("persona").all()
     if evento_id:
         qs = qs.filter(evento_id=evento_id)
@@ -192,14 +199,14 @@ def estadisticas_por_municipio(evento_id=None, usuario=None) -> list:
     labels = [r[0] for r in _RANGOS_EDAD]
     buckets = {}
     for reg in qs:
-        genero = reg.persona.genero
-        if genero not in ("M", "F"):
+        genero_label = _GENERO_LABELS.get(reg.persona.genero)
+        if not genero_label:
             continue
         rango = _rango_edad(reg.edad)
         if not rango:
             continue
         municipio = reg.municipio or "Sin municipio"
-        key = (municipio, "Masculino" if genero == "M" else "Femenino")
+        key = (municipio, genero_label)
         buckets.setdefault(key, {label: 0 for label in labels})
         buckets[key][rango] += 1
 
@@ -208,7 +215,7 @@ def estadisticas_por_municipio(evento_id=None, usuario=None) -> list:
     totales_columna = {label: 0 for label in labels}
     total_general = 0
     for municipio in municipios:
-        for genero_label in ("Masculino", "Femenino"):
+        for genero_label in ("Masculino", "Femenino", "Otro"):
             conteos = buckets.get((municipio, genero_label), {label: 0 for label in labels})
             total_fila = sum(conteos.values())
             filas.append({"municipio": municipio, "genero": genero_label, **conteos, "total": total_fila})

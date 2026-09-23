@@ -1,5 +1,28 @@
 from rest_framework import serializers
 
+# El frontend a veces manda el género como palabra completa ("Femenino"/"Masculino"/"Otro", en
+# vez del código corto que se guarda realmente — ver PersonaAsistente.genero, CharField(max_length=1)
+# y el reporte de estadísticas, que ya distingue Masculino/Femenino/Otro). En vez de rechazar esas
+# variantes con un 422, GeneroField las normaliza al código antes de validar contra los choices.
+_GENERO_ALIASES = {
+    "femenino": "F", "mujer": "F", "f": "F",
+    "masculino": "M", "hombre": "M", "m": "M",
+    "otro": "O", "otra": "O", "o": "O",
+}
+
+
+class GeneroField(serializers.ChoiceField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("choices", ["F", "M", "O"])
+        super().__init__(**kwargs)
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            normalizado = _GENERO_ALIASES.get(data.strip().lower())
+            if normalizado:
+                data = normalizado
+        return super().to_internal_value(data)
+
 
 class AsistenteDataSerializer(serializers.Serializer):
     nombre = serializers.CharField(required=False, allow_null=True, allow_blank=True)
@@ -8,7 +31,7 @@ class AsistenteDataSerializer(serializers.Serializer):
     municipio = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     telefono = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     edad = serializers.IntegerField(required=False, allow_null=True)
-    genero = serializers.ChoiceField(choices=["F", "M", "O"], required=False, allow_null=True)
+    genero = GeneroField(required=False, allow_null=True)
     pertenencia_etnica = serializers.ChoiceField(
         choices=["ninguno", "indigena", "afro", "rom", "raizal"],
         required=False,
@@ -53,7 +76,7 @@ class PersonaUpdateSerializer(serializers.Serializer):
 
     tipo_documento = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     nombre = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    genero = serializers.ChoiceField(choices=["F", "M", "O"], required=False, allow_null=True)
+    genero = GeneroField(required=False, allow_null=True)
     pertenencia_etnica = serializers.ChoiceField(
         choices=["ninguno", "indigena", "afro", "rom", "raizal"],
         required=False,
