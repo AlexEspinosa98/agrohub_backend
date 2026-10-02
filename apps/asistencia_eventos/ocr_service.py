@@ -42,6 +42,8 @@ from PIL import Image
 from rest_framework import status as http_status
 from rest_framework.exceptions import APIException
 
+from apps.asistencia_eventos.documentos import completar_tipo_documento
+
 _OCR_ENGINE = None
 
 
@@ -479,5 +481,10 @@ def extract_asistencia(upload_file) -> dict:
         raise OcrUnavailable(detail=f"No se pudo leer el archivo: {exc}") from exc
 
     if settings.ASISTENCIA_OCR_ENGINE == "llm":
-        return _extract_with_llm(pages)
-    return _extract_with_paddleocr(pages)
+        resultado = _extract_with_llm(pages)
+    else:
+        resultado = _extract_with_paddleocr(pages)
+    # Tipo de documento: el escrito en la hoja si vino pegado al número, si no por edad (CC/TI).
+    for asistente in resultado["asistentes"]:
+        completar_tipo_documento(asistente)
+    return resultado

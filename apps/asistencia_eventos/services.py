@@ -1,11 +1,14 @@
 from django.db import transaction
 
+from apps.asistencia_eventos.documentos import completar_tipo_documento, normalizar_tipo, separar_tipo_y_numero
 from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia
 
 _RANGOS_EDAD = [("0-14", 0, 14), ("15-19", 15, 19), ("20-59", 20, 59), ("mayor de 60", 60, None)]
 
 
-def _upsert_persona(numero_documento, tipo_documento, nombre, genero, pertenencia_etnica) -> PersonaAsistente:
+def _upsert_persona(
+    numero_documento, tipo_documento, nombre, genero, pertenencia_etnica, tipo_inferido=False
+) -> PersonaAsistente:
     """Inserta o actualiza una persona por número de documento — mismo
     patrón que PersonaNutricional en encuesta_nutricional: un documento,
     un único registro de persona, sin importar en cuántos eventos aparezca."""
@@ -21,6 +24,9 @@ def _upsert_persona(numero_documento, tipo_documento, nombre, genero, pertenenci
     if not created:
         changed_fields = []
         for field, value in incoming.items():
+            # Un tipo inferido por edad nunca pisa uno que la persona ya tenía guardado.
+            if field == "tipo_documento" and tipo_inferido and persona.tipo_documento:
+                continue
             if value is not None:
                 setattr(persona, field, value)
                 changed_fields.append(field)
@@ -48,12 +54,18 @@ def guardar_evento(
         registrado_por=registrado_por,
     )
     for row in data["asistentes"]:
+        # Si quien revisó no puso tipo de documento, se completa por edad (CC mayores, TI menores).
+        tipo_escrito = normalizar_tipo(row.get("tipo_documento")) or separar_tipo_y_numero(
+            row.get("numero_documento")
+        )[0]
+        row = completar_tipo_documento(dict(row))
         persona = _upsert_persona(
             numero_documento=row["numero_documento"],
             tipo_documento=row.get("tipo_documento"),
             nombre=row.get("nombre"),
             genero=row.get("genero"),
             pertenencia_etnica=row.get("pertenencia_etnica"),
+            tipo_inferido=tipo_escrito is None,
         )
         RegistroAsistencia.objects.update_or_create(
             evento=evento,
