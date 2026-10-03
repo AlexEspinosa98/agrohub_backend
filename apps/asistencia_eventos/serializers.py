@@ -24,6 +24,13 @@ class GeneroField(serializers.ChoiceField):
         return super().to_internal_value(data)
 
 
+def _validar_comunidad_vs_etnia(comunidad, etnia):
+    if comunidad and etnia != "indigena":
+        raise serializers.ValidationError(
+            {"comunidad": "Solo aplica cuando pertenencia_etnica es 'indigena'."}
+        )
+
+
 class AsistenteDataSerializer(serializers.Serializer):
     nombre = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     tipo_documento = serializers.CharField(required=False, allow_null=True, allow_blank=True)
@@ -37,6 +44,11 @@ class AsistenteDataSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+    comunidad = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
+
+    def validate(self, attrs):
+        _validar_comunidad_vs_etnia(attrs.get("comunidad"), attrs.get("pertenencia_etnica"))
+        return attrs
 
 
 class EventoConfirmSerializer(serializers.Serializer):
@@ -82,6 +94,9 @@ class PersonaUpdateSerializer(serializers.Serializer):
         required=False,
         allow_null=True,
     )
+    # La regla "solo con etnia indígena" se valida en services.actualizar_persona, porque en una
+    # edición parcial la etnia puede no venir en el body (es la que ya tiene guardada la persona).
+    comunidad = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
 
 
 class RegistroAsistenciaUpdateSerializer(serializers.Serializer):

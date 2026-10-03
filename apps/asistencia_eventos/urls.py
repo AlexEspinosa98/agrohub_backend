@@ -12,6 +12,7 @@ urlpatterns = [
         views.evento_asistente_detail,
         name="asistencia_evento_asistente_detail",
     ),
+    path("comunidades", views.comunidades_indigenas, name="asistencia_comunidades"),
     path("personas/<str:numero_documento>", views.persona_detail, name="asistencia_persona_detail"),
     path("dashboard/resumen", views.dashboard_resumen, name="asistencia_dashboard_resumen"),
     path("dashboard/estadisticas", views.dashboard_estadisticas, name="asistencia_dashboard_estadisticas"),

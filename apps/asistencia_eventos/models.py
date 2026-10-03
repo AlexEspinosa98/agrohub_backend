@@ -12,6 +12,10 @@ class PersonaAsistente(models.Model):
     nombre = models.CharField(max_length=255, null=True, blank=True)
     genero = models.CharField(max_length=1, null=True, blank=True)
     pertenencia_etnica = models.CharField(max_length=20, null=True, blank=True)
+    # Opcional y solo con sentido si pertenencia_etnica == "indigena": a qué comunidad/pueblo
+    # pertenece (ver catalogos.COMUNIDADES_INDIGENAS_SUGERIDAS). Se limpia si la etnia deja de ser
+    # indígena. No viene del OCR — se escoge/corrige en la revisión.
+    comunidad = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

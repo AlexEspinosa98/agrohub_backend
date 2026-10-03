@@ -1,13 +1,17 @@
 from django.db import transaction
 
 from apps.asistencia_eventos.documentos import completar_tipo_documento, normalizar_tipo, separar_tipo_y_numero
+from rest_framework.exceptions import ValidationError
+
+from apps.asistencia_eventos.catalogos import normalizar_comunidad
 from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia
 
 _RANGOS_EDAD = [("0-14", 0, 14), ("15-19", 15, 19), ("20-59", 20, 59), ("mayor de 60", 60, None)]
 
 
 def _upsert_persona(
-    numero_documento, tipo_documento, nombre, genero, pertenencia_etnica, tipo_inferido=False
+    numero_documento, tipo_documento, nombre, genero, pertenencia_etnica, tipo_inferido=False,
+    comunidad=None,
 ) -> PersonaAsistente:
     """Inserta o actualiza una persona por número de documento — mismo
     patrón que PersonaNutricional en encuesta_nutricional: un documento,
@@ -17,6 +21,7 @@ def _upsert_persona(
         "nombre": nombre,
         "genero": genero,
         "pertenencia_etnica": pertenencia_etnica,
+        "comunidad": normalizar_comunidad(comunidad) if pertenencia_etnica == "indigena" else None,
     }
     persona, created = PersonaAsistente.objects.get_or_create(
         numero_documento=numero_documento, defaults=incoming
@@ -30,6 +35,10 @@ def _upsert_persona(
             if value is not None:
                 setattr(persona, field, value)
                 changed_fields.append(field)
+        # Si ahora se declara una etnia que no es indígena, la comunidad anterior ya no aplica.
+        if pertenencia_etnica is not None and pertenencia_etnica != "indigena" and persona.comunidad:
+            persona.comunidad = None
+            changed_fields.append("comunidad")
         if changed_fields:
             persona.save(update_fields=changed_fields)
     return persona
@@ -66,6 +75,7 @@ def guardar_evento(
             genero=row.get("genero"),
             pertenencia_etnica=row.get("pertenencia_etnica"),
             tipo_inferido=tipo_escrito is None,
+            comunidad=row.get("comunidad"),
         )
         RegistroAsistencia.objects.update_or_create(
             evento=evento,
@@ -100,13 +110,23 @@ def eliminar_evento(evento: Evento) -> None:
     evento.delete()
 
 
-_CAMPOS_PERSONA_EDITABLES = ("tipo_documento", "nombre", "genero", "pertenencia_etnica")
+_CAMPOS_PERSONA_EDITABLES = ("tipo_documento", "nombre", "genero", "pertenencia_etnica", "comunidad")
 
 
 def actualizar_persona(persona: PersonaAsistente, data: dict) -> PersonaAsistente:
     """Corrige la ficha maestra de una persona (ej. el OCR leyó mal el nombre) —
     solo toca los campos que vienen en `data`. No afecta sus registros de
     asistencia en los eventos donde ya participó."""
+    data = dict(data)
+    if "comunidad" in data:
+        data["comunidad"] = normalizar_comunidad(data["comunidad"])
+    etnia_final = data["pertenencia_etnica"] if "pertenencia_etnica" in data else persona.pertenencia_etnica
+    if etnia_final != "indigena":
+        if data.get("comunidad"):
+            raise ValidationError({"comunidad": "Solo aplica cuando pertenencia_etnica es 'indigena'."})
+        # Cambiar la etnia a una no indígena limpia la comunidad que tuviera guardada.
+        if persona.comunidad or "comunidad" in data:
+            data["comunidad"] = None
     changed_fields = [campo for campo in _CAMPOS_PERSONA_EDITABLES if campo in data]
     for campo in changed_fields:
         setattr(persona, campo, data[campo])
@@ -280,6 +300,7 @@ def asistentes_para_export(evento_id=None, usuario=None) -> list:
             "numero_documento": r.persona.numero_documento,
             "genero": r.persona.genero,
             "pertenencia_etnica": r.persona.pertenencia_etnica,
+            "comunidad": r.persona.comunidad,
             "municipio": r.municipio,
             "telefono": r.telefono,
             "edad": r.edad,

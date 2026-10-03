@@ -14,6 +14,7 @@ from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
 
 from apps.asistencia_eventos import services
+from apps.asistencia_eventos.catalogos import COMUNIDADES_INDIGENAS_SUGERIDAS
 from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia
 from apps.asistencia_eventos.ocr_service import extract_asistencia
 from apps.asistencia_eventos.serializers import (
@@ -277,6 +278,17 @@ def _eliminar_evento(request, evento_id: int):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_CUALQUIER_ROL)
+def comunidades_indigenas(request):
+    """Opciones sugeridas para el campo `comunidad` (solo aplica si pertenencia_etnica="indigena").
+    Es una lista de sugerencias para el desplegable: el campo acepta cualquier texto."""
+    return Response(
+        {"status": status.HTTP_200_OK, "message": "comunidades", "data": COMUNIDADES_INDIGENAS_SUGERIDAS}
+    )
+
+
 @api_view(["GET", "PUT", "DELETE"])
 @authentication_classes(_AUTH)
 @permission_classes(_ADMIN_ONLY)
@@ -309,6 +321,7 @@ def persona_detail(request, numero_documento: str):
                 "nombre": persona.nombre,
                 "genero": persona.genero,
                 "pertenencia_etnica": persona.pertenencia_etnica,
+                "comunidad": persona.comunidad,
                 "eventos": services.eventos_de_persona(persona),
             },
         }
@@ -369,6 +382,7 @@ def _obtener_evento_detail(request, evento_id: int):
             "numero_documento": r.persona.numero_documento,
             "genero": r.persona.genero,
             "pertenencia_etnica": r.persona.pertenencia_etnica,
+            "comunidad": r.persona.comunidad,
             "municipio": r.municipio,
             "telefono": r.telefono,
             "edad": r.edad,
@@ -516,6 +530,7 @@ def dashboard_excel(request):
             "numero_documento",
             "genero",
             "pertenencia_etnica",
+            "comunidad",
             "municipio",
             "telefono",
             "edad",
