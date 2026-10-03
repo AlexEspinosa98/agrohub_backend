@@ -198,7 +198,7 @@ Como usuario del panel, quiero ver la lista de eventos registrados y, de cada un
 - Criterios: eliminar un evento borra en cascada sus registros de asistencia, pero **no** borra a las personas — siguen en el sistema para otros eventos.
 
 **HU-W20b — Corregir o eliminar una persona**
-Como usuario del panel, quiero corregir el nombre, tipo de documento, género o pertenencia étnica de una persona cuando el OCR (o quien digitó) se equivocó, o eliminarla del sistema si no debía existir.
+Como usuario del panel, quiero corregir el nombre, tipo de documento, género, pertenencia étnica o comunidad (HU-W25) de una persona cuando el OCR (o quien digitó) se equivocó, o eliminarla del sistema si no debía existir.
 - `GET/PUT/DELETE /asistencia-eventos/personas/<numero_documento>`
 - Criterios: `GET` muestra también todos los eventos a los que asistió; eliminar una persona la borra en cascada de **todos** los eventos donde aparece — es la operación más amplia de las tres de este módulo, hay que usarla con cuidado.
 
@@ -217,6 +217,51 @@ Como usuario del panel, quiero ver cuántos asistentes hay por municipio, géner
 **HU-W23 — Descargar el dashboard completo en Excel**
 Como usuario del panel, quiero descargar un solo archivo Excel con el resumen, las estadísticas, el listado de eventos y el detalle de asistentes, para compartirlo o analizarlo fuera del sistema.
 - `GET /asistencia-eventos/dashboard/excel` (opcional `?evento_id=`)
+
+**HU-W24 — Que el tipo de documento (CC / TI) venga prellenado**
+Como usuario del panel, quiero que al digitalizar una hoja el sistema ya me proponga el tipo de documento de cada asistente, para no tener que escribirlo a mano en cada fila — solo revisar y corregir si hace falta.
+- Aplica en `POST /asistencia-eventos/scan` (el borrador ya trae `tipo_documento` por asistente) y de nuevo al guardar (`POST /asistencia-eventos/eventos`, `POST /asistencia-eventos/scan-bulk`).
+- **Regla, en este orden:**
+  1. Si en la hoja el tipo venía escrito junto al número (`CC 1.081.806.419`, `T.I. 1004163795`; también CE, RC, PEP, PPT, PA), se respeta ese y el número queda solo con dígitos.
+  2. Si no venía escrito pero hay edad: **18 o más → `CC`, menos de 18 → `TI`**.
+  3. Sin tipo escrito ni edad: `null` (no se inventa).
+- Criterios:
+  - El front debe mostrar `tipo_documento` como un campo editable en la pantalla de revisión (el valor que llega es una propuesta, no un dato confirmado) y mandar en `POST /eventos` el valor final que dejó el usuario.
+  - Si el usuario lo deja vacío, el backend vuelve a aplicar la regla de edad al guardar; no hace falta que el front la replique.
+  - Un tipo inferido por edad **nunca pisa** uno que la persona ya tenía guardado de un evento anterior (p. ej. un CE corregido a mano).
+  - Es una aproximación: un menor de 7 años tendría registro civil y un extranjero CE/PEP; el usuario lo corrige en la revisión o con `PUT /personas/<numero_documento>`.
+- Ejemplo de borrador devuelto por `/scan` (fragmento):
+  ```json
+  {"nombre": "Laura Rojas", "numero_documento": "1004163795", "edad": 17, "tipo_documento": "TI", ...}
+  ```
+
+**HU-W25 — Registrar la comunidad cuando la persona es indígena**
+Como usuario del panel, quiero que cuando marque a un asistente como indígena pueda escoger de qué comunidad es (y que ese campo no aparezca para el resto), para poder reportar el alcance del proyecto por pueblo indígena.
+- Campo nuevo **`comunidad`** (texto, máx. 100, opcional), guardado en la **ficha de la persona** (igual que género y etnia), no en cada evento.
+- `GET /asistencia-eventos/comunidades` (cualquier rol autenticado) → opciones sugeridas para el desplegable: `{"status":200,"message":"comunidades","data":["Arhuaco","Kogui","Wiwa","Kankuamo","Zenú","Wayuú","Chimila (Ette Ennaka)","Otra"]}`. *(Lista inicial sugerida, pendiente de confirmar con el equipo — se ajusta en `apps/asistencia_eventos/catalogos.py`.)*
+- Se envía dentro de cada asistente en `POST /asistencia-eventos/eventos` y en `PUT /asistencia-eventos/personas/<numero_documento>`; se devuelve en el detalle del evento, el detalle/historial de la persona y la hoja "Asistentes" del Excel.
+- **Lo que debe hacer el front (el desplegable vive en el front, el backend solo entrega las opciones y valida):**
+  1. Mostrar el selector de comunidad **solo** cuando `pertenencia_etnica = "indigena"`; ocultarlo en cualquier otro caso.
+  2. Cargar las opciones desde `GET /asistencia-eventos/comunidades`.
+  3. Incluir la opción **"Otra"** con un campo de texto libre: el backend acepta cualquier texto, no solo los de la lista. Mandar el texto escrito en `comunidad`.
+  4. Al cambiar la etnia a una que no sea indígena, vaciar y no enviar `comunidad`.
+  5. El OCR **no** llena este campo: llega vacío y se escoge en la revisión.
+- Criterios del backend:
+  - `comunidad` es opcional; omitirlo o mandar `null`/`""` equivale a "sin comunidad".
+  - Con una etnia distinta de `indigena`, mandar `comunidad` responde `422` (`campo: "asistentes.0.comunidad"` al guardar un evento, `campo: "comunidad"` en el `PUT` de la persona): "Solo aplica cuando pertenencia_etnica es 'indigena'".
+  - Si a una persona con comunidad le cambian la etnia (por `PUT /personas/...`) a una que no es indígena, la comunidad guardada se **borra** automáticamente.
+  - Si un asistente ya existente se vuelve a mandar en otro evento **sin** `comunidad`, la que ya tenía se **conserva** (omitir no borra; para borrarla hay que cambiar la etnia o mandar el `PUT` con `comunidad: null`).
+  - Si el texto coincide con una opción sugerida sin importar mayúsculas o espacios (`" kogui "`), se guarda con la forma de la lista (`"Kogui"`); si no coincide, se guarda tal cual.
+- Ejemplo (`POST /asistencia-eventos/eventos`, fragmento de `data`):
+  ```json
+  {"asistentes": [
+    {"numero_documento": "1081806419", "nombre": "Jeannis Quintero", "edad": 17,
+     "genero": "F", "pertenencia_etnica": "indigena", "comunidad": "Kogui"},
+    {"numero_documento": "1067838582", "nombre": "Kathy Menao", "edad": 31,
+     "genero": "F", "pertenencia_etnica": "raizal"}
+  ]}
+  ```
+- Fuera de alcance por ahora: el dashboard de estadísticas (`HU-W22`) no desglosa por comunidad.
 
 ---
 
