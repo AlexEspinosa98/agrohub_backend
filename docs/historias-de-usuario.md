@@ -263,6 +263,28 @@ Como usuario del panel, quiero que cuando marque a un asistente como indígena p
   ```
 - Fuera de alcance por ahora: el dashboard de estadísticas (`HU-W22`) no desglosa por comunidad.
 
+**HU-W26 — Documento provisional y alerta para asistentes sin cédula**
+Como usuario del panel, quiero que si una persona asistió pero no tiene o no dio su documento, el sistema le asigne un número provisional y me avise con una alerta, para poder guardar el evento completo y actualizar el documento real después.
+- Si `numero_documento` llega vacío, `null` o el OCR no lo lee, el backend genera un número **provisional único** `PROV-` + 10 caracteres (ej. `PROV-8A9EAF8711`) y fija `tipo_documento = "PROV"`.
+- `numero_documento` deja de ser obligatorio en `POST /asistencia-eventos/scan`, `/eventos` y la carga múltiple. En `/scan` el número provisional ya viene asignado en el borrador para que se vea en la revisión.
+- Cada asistente con número provisional devuelve **`alerta`**: `"Documento provisional: la persona no presentó cédula; pendiente de actualizar"` (en caso contrario `null`). Aparece en el borrador de `/scan`, el detalle del evento, y como columna **alerta** en la hoja "Asistentes" del Excel.
+- Lo que debe hacer el front: mostrar un aviso (ej. etiqueta amarilla) en las filas con `alerta` y permitir corregir el documento real desde la ficha de la persona.
+- Los documentos repetidos en una misma carga solo se validan entre números reales (los provisionales son siempre distintos).
+
+**HU-W27 — Pertenencia étnica "ninguno" por defecto**
+Como usuario del panel, quiero que cuando no se declare etnia aparezca "ninguno" y no un campo vacío, para que los reportes y las descargas no tengan huecos.
+- Una persona **nueva** sin `pertenencia_etnica` se guarda como `"ninguno"`; una persona que ya existía **conserva** la etnia (y comunidad) que tenía si en el nuevo evento no se envía.
+- Los listados, el detalle del evento y el Excel muestran `"ninguno"` cuando está vacía.
+
+**HU-W28 — Municipio del asistente = lugar del evento si no se indica**
+Como usuario del panel, quiero que si un asistente no trae municipio se use el lugar donde se hizo el evento, para que las estadísticas por municipio no pierdan asistentes en "Sin municipio".
+- Se aplica al guardar, en el borrador de `/scan`, el detalle del evento, el Excel, las estadísticas por municipio (HU-W22) y el historial de eventos de una persona.
+- Si el asistente sí trae municipio, siempre gana el suyo.
+
+**HU-W29 — Tipo de documento siempre asignado**
+Como usuario del panel, quiero que todo asistente quede con un tipo de documento, para no tener que completarlo a mano.
+- Se respeta el tipo escrito en la hoja; si no hay, por edad (18+ → `CC`, menor → `TI`); si tampoco hay edad → `CC` por defecto (ajusta HU-W24, que antes lo dejaba vacío). Sin documento → `PROV` (HU-W26).
+
 ---
 
 ## Historias transversales (no atadas a un único endpoint)
