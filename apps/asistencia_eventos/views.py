@@ -13,7 +13,7 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
 
-from apps.asistencia_eventos import services
+from apps.asistencia_eventos import documentos, services
 from apps.asistencia_eventos.catalogos import COMUNIDADES_INDIGENAS_SUGERIDAS
 from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia
 from apps.asistencia_eventos.ocr_service import extract_asistencia
@@ -57,13 +57,19 @@ def scan_evento(request):
 
     extracted = extract_asistencia(upload)
 
-    documentos = [a["numero_documento"] for a in extracted["asistentes"] if a.get("numero_documento")]
+    numeros = [a["numero_documento"] for a in extracted["asistentes"] if a.get("numero_documento")]
     existentes = set(
-        PersonaAsistente.objects.filter(numero_documento__in=documentos).values_list(
+        PersonaAsistente.objects.filter(numero_documento__in=numeros).values_list(
             "numero_documento", flat=True
         )
     )
     for asistente in extracted["asistentes"]:
+        documentos.completar_tipo_documento(asistente)
+        asistente["alerta"] = (
+            documentos.ALERTA_DOCUMENTO_PROVISIONAL
+            if documentos.es_documento_provisional(asistente["numero_documento"])
+            else None
+        )
         asistente["persona_ya_registrada"] = asistente.get("numero_documento") in existentes
         asistente["pertenencia_etnica"] = services.etnia_o_ninguna(asistente.get("pertenencia_etnica"))
         if not asistente.get("municipio") and extracted.get("lugar"):
@@ -383,6 +389,7 @@ def _obtener_evento_detail(request, evento_id: int):
             "nombre": r.persona.nombre,
             "tipo_documento": r.persona.tipo_documento,
             "numero_documento": r.persona.numero_documento,
+            "alerta": documentos.ALERTA_DOCUMENTO_PROVISIONAL if documentos.es_documento_provisional(r.persona.numero_documento) else None,
             "genero": r.persona.genero,
             "pertenencia_etnica": services.etnia_o_ninguna(r.persona.pertenencia_etnica),
             "comunidad": r.persona.comunidad,
@@ -531,6 +538,7 @@ def dashboard_excel(request):
             "nombre",
             "tipo_documento",
             "numero_documento",
+            "alerta",
             "genero",
             "pertenencia_etnica",
             "comunidad",

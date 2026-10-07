@@ -34,7 +34,8 @@ def _validar_comunidad_vs_etnia(comunidad, etnia):
 class AsistenteDataSerializer(serializers.Serializer):
     nombre = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     tipo_documento = serializers.CharField(required=False, allow_null=True, allow_blank=True)
-    numero_documento = serializers.CharField()
+    # Vacío -> el backend asigna un número provisional (PROV-…) y deja la alerta de documento.
+    numero_documento = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     municipio = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     telefono = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     edad = serializers.IntegerField(required=False, allow_null=True)
@@ -63,7 +64,7 @@ class EventoConfirmSerializer(serializers.Serializer):
     def validate_asistentes(self, value):
         if not value:
             raise serializers.ValidationError("Debe incluir al menos un asistente")
-        documentos = [a["numero_documento"] for a in value]
+        documentos = [a["numero_documento"] for a in value if a.get("numero_documento")]
         duplicados = {d for d in documentos if documentos.count(d) > 1}
         if duplicados:
             raise serializers.ValidationError(

@@ -11,6 +11,7 @@ La inferencia por edad es una aproximación (un menor de 7 tendría registro civ
 CE/PEP), por eso un tipo escrito en la hoja siempre gana y el paso de revisión humana lo puede
 corregir."""
 import re
+import uuid
 
 MAYORIA_DE_EDAD = 18
 
@@ -50,9 +51,29 @@ def inferir_tipo(edad, tipo_actual=None):
     return "CC"
 
 
+PREFIJO_PROVISIONAL = "PROV-"
+TIPO_PROVISIONAL = "PROV"
+ALERTA_DOCUMENTO_PROVISIONAL = "Documento provisional: la persona no presentó cédula; pendiente de actualizar"
+
+
+def generar_documento_provisional():
+    """Número provisional único (PROV-XXXXXXXXXX) para quien no tiene o no dio documento: permite
+    guardar el registro y deja una alerta para actualizarlo luego con el número real."""
+    return PREFIJO_PROVISIONAL + uuid.uuid4().hex[:10].upper()
+
+
+def es_documento_provisional(numero):
+    return bool(numero) and str(numero).startswith(PREFIJO_PROVISIONAL)
+
+
 def completar_tipo_documento(asistente):
     """Muta un dict de asistente (forma del OCR / del payload de guardado): separa un prefijo de
     tipo pegado al número y completa `tipo_documento` por edad si hace falta."""
+    if not str(asistente.get("numero_documento") or "").strip():
+        asistente["numero_documento"] = generar_documento_provisional()
+    if es_documento_provisional(asistente["numero_documento"]):
+        asistente["tipo_documento"] = TIPO_PROVISIONAL
+        return asistente
     tipo_escrito, numero = separar_tipo_y_numero(asistente.get("numero_documento"))
     if numero is not None:
         asistente["numero_documento"] = numero

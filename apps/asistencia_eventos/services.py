@@ -1,6 +1,6 @@
 from django.db import transaction
 
-from apps.asistencia_eventos.documentos import completar_tipo_documento, normalizar_tipo, separar_tipo_y_numero
+from apps.asistencia_eventos.documentos import ALERTA_DOCUMENTO_PROVISIONAL, completar_tipo_documento, es_documento_provisional, normalizar_tipo, separar_tipo_y_numero
 from rest_framework.exceptions import ValidationError
 
 from apps.asistencia_eventos.catalogos import normalizar_comunidad
@@ -313,6 +313,7 @@ def asistentes_para_export(evento_id=None, usuario=None) -> list:
             "nombre": r.persona.nombre,
             "tipo_documento": r.persona.tipo_documento,
             "numero_documento": r.persona.numero_documento,
+            "alerta": ALERTA_DOCUMENTO_PROVISIONAL if es_documento_provisional(r.persona.numero_documento) else None,
             "genero": r.persona.genero,
             "pertenencia_etnica": etnia_o_ninguna(r.persona.pertenencia_etnica),
             "comunidad": r.persona.comunidad,
