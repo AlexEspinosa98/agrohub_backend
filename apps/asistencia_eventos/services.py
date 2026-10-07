@@ -24,7 +24,9 @@ def _upsert_persona(
         "comunidad": normalizar_comunidad(comunidad) if pertenencia_etnica == "indigena" else None,
     }
     persona, created = PersonaAsistente.objects.get_or_create(
-        numero_documento=numero_documento, defaults=incoming
+        numero_documento=numero_documento,
+        # Persona nueva sin etnia declarada -> "ninguno"; una existente conserva la que ya tenía.
+        defaults={**incoming, "pertenencia_etnica": etnia_o_ninguna(pertenencia_etnica)},
     )
     if not created:
         changed_fields = []
@@ -42,6 +44,19 @@ def _upsert_persona(
         if changed_fields:
             persona.save(update_fields=changed_fields)
     return persona
+
+
+ETNIA_POR_DEFECTO = "ninguno"
+
+
+def etnia_o_ninguna(valor):
+    """Sin etnia declarada (None / vacío) se muestra y guarda como "ninguno"."""
+    return valor or ETNIA_POR_DEFECTO
+
+
+def municipio_o_lugar(municipio, evento):
+    """El municipio del asistente; si no vino, el lugar donde se hizo el evento."""
+    return (municipio or "").strip() or evento.lugar or None
 
 
 @transaction.atomic
@@ -81,7 +96,7 @@ def guardar_evento(
             evento=evento,
             persona=persona,
             defaults={
-                "municipio": row.get("municipio"),
+                "municipio": municipio_o_lugar(row.get("municipio"), evento),
                 "telefono": row.get("telefono"),
                 "edad": row.get("edad"),
             },
@@ -151,7 +166,7 @@ def eventos_de_persona(persona: PersonaAsistente) -> list:
             "evento_id": r.evento_id,
             "tema": r.evento.tema,
             "fecha": r.evento.fecha,
-            "municipio": r.municipio,
+            "municipio": municipio_o_lugar(r.municipio, r.evento),
             "telefono": r.telefono,
             "edad": r.edad,
         }
@@ -222,7 +237,7 @@ def estadisticas_por_municipio(evento_id=None, usuario=None) -> list:
     Las 3 filas de género por municipio (Masculino/Femenino/Otro) salen siempre, aunque alguna
     quede en cero — antes "Otro" (genero="O") ni siquiera se contaba, se descartaba en silencio
     junto con cualquier fila sin genero reconocido."""
-    qs = RegistroAsistencia.objects.select_related("persona").all()
+    qs = RegistroAsistencia.objects.select_related("persona", "evento").all()
     if evento_id:
         qs = qs.filter(evento_id=evento_id)
     if usuario is not None:
@@ -237,7 +252,7 @@ def estadisticas_por_municipio(evento_id=None, usuario=None) -> list:
         rango = _rango_edad(reg.edad)
         if not rango:
             continue
-        municipio = reg.municipio or "Sin municipio"
+        municipio = municipio_o_lugar(reg.municipio, reg.evento) or "Sin municipio"
         key = (municipio, genero_label)
         buckets.setdefault(key, {label: 0 for label in labels})
         buckets[key][rango] += 1
@@ -299,9 +314,9 @@ def asistentes_para_export(evento_id=None, usuario=None) -> list:
             "tipo_documento": r.persona.tipo_documento,
             "numero_documento": r.persona.numero_documento,
             "genero": r.persona.genero,
-            "pertenencia_etnica": r.persona.pertenencia_etnica,
+            "pertenencia_etnica": etnia_o_ninguna(r.persona.pertenencia_etnica),
             "comunidad": r.persona.comunidad,
-            "municipio": r.municipio,
+            "municipio": municipio_o_lugar(r.municipio, r.evento),
             "telefono": r.telefono,
             "edad": r.edad,
         }

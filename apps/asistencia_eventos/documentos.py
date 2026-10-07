@@ -6,7 +6,7 @@ después, en código:
   1. si junto al número viene un prefijo reconocible ("CC 1081...", "T.I. 1004...") se separa
      y se respeta, porque es lo que escribió la persona;
   2. si no hay tipo escrito pero hay edad: 18 o más -> CC, menos de 18 -> TI;
-  3. sin tipo ni edad queda en None (no se inventa nada).
+  3. sin tipo ni edad se asigna CC por defecto (siempre debe quedar un tipo; la revisión lo corrige).
 La inferencia por edad es una aproximación (un menor de 7 tendría registro civil, un extranjero
 CE/PEP), por eso un tipo escrito en la hoja siempre gana y el paso de revisión humana lo puede
 corregir."""
@@ -41,13 +41,13 @@ def separar_tipo_y_numero(valor):
 
 
 def inferir_tipo(edad, tipo_actual=None):
-    """El tipo ya conocido (normalizado) gana; si no hay, se infiere por edad; si tampoco, None."""
+    """El tipo ya conocido (normalizado) gana; si no hay, se infiere por edad; si tampoco, CC."""
     tipo = normalizar_tipo(tipo_actual)
     if tipo:
         return tipo
     if isinstance(edad, int) and not isinstance(edad, bool):
         return "CC" if edad >= MAYORIA_DE_EDAD else "TI"
-    return None
+    return "CC"
 
 
 def completar_tipo_documento(asistente):

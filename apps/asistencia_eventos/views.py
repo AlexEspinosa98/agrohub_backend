@@ -65,6 +65,9 @@ def scan_evento(request):
     )
     for asistente in extracted["asistentes"]:
         asistente["persona_ya_registrada"] = asistente.get("numero_documento") in existentes
+        asistente["pertenencia_etnica"] = services.etnia_o_ninguna(asistente.get("pertenencia_etnica"))
+        if not asistente.get("municipio") and extracted.get("lugar"):
+            asistente["municipio"] = extracted["lugar"]
 
     return Response(
         {
@@ -381,9 +384,9 @@ def _obtener_evento_detail(request, evento_id: int):
             "tipo_documento": r.persona.tipo_documento,
             "numero_documento": r.persona.numero_documento,
             "genero": r.persona.genero,
-            "pertenencia_etnica": r.persona.pertenencia_etnica,
+            "pertenencia_etnica": services.etnia_o_ninguna(r.persona.pertenencia_etnica),
             "comunidad": r.persona.comunidad,
-            "municipio": r.municipio,
+            "municipio": services.municipio_o_lugar(r.municipio, evento),
             "telefono": r.telefono,
             "edad": r.edad,
         }
