@@ -323,6 +323,28 @@ Como usuario del panel, quiero subir una hoja de asistencia de varias páginas y
   - Los archivos del escaneo quedan guardados en el servidor (`media/asistencia_eventos/scans/`).
 - Límite conocido: `POST /scan-bulk` (carga masiva sin revisión) sigue siendo síncrono, así que con el motor LLM solo aguanta 1-2 hojas de una página por petición.
 
+**HU-W31 — Saber quién cargó (y quién editó) cada evento**
+Como administrador, quiero ver qué usuario cargó cada hoja de asistencia y quién la editó por última vez, para poder hacer seguimiento, pedir correcciones a la persona correcta y saber cuánto aporta cada quien.
+- **Qué se registra, sin que el front mande nada:** al guardar un evento (`POST /eventos` y `POST /scan-bulk`) el backend toma el usuario del token y lo guarda como quien lo cargó; al editar el encabezado (`PUT /eventos/<id>`) guarda quién lo editó. Un evento que nunca se editó tiene `editado_por = null`.
+- **Dónde viene** (`GET /asistencia-eventos/eventos` en cada elemento, y `GET /asistencia-eventos/eventos/<id>`):
+  ```json
+  {
+    "id": 6,
+    "registrado_por": "Alberto Mario Vargas Suárez",
+    "registrado_por_id": 19,
+    "registrado_por_correo": "alvargas89@hotmail.com",
+    "editado_por": null
+  }
+  ```
+  - `registrado_por` y `editado_por` (nombre) ya existían y no cambian.
+  - **Nuevos:** `registrado_por_id` y `registrado_por_correo`. Hay que usarlos para identificar a la persona: **el nombre no es único** (hoy hay dos usuarios llamados "Ricardo Pupo"). Mostrar el nombre y, por ejemplo, el correo debajo o en un tooltip; filtrar o agrupar por `registrado_por_id`, nunca por nombre.
+  - Los tres pueden ser `null` en eventos cargados antes de que existiera este registro (hoy ninguno lo es).
+- También aparece en la hoja "Eventos" del Excel (`GET /dashboard/excel`, columnas `registrado_por` y `editado_por`, por nombre).
+- **Quién ve qué (regla actual):** un `superadmin` ve **todos** los eventos y por tanto la columna "cargado por" es útil; cualquier otro rol (`admin`, `user`) ve **solo los eventos que él mismo cargó**, así que para ellos siempre sería su propio nombre — el front puede ocultar la columna para esos roles. *(Pendiente de decisión: si el rol `admin` debe poder ver los eventos de todos; de ser así se cambia la regla en el backend y esta historia se actualiza.)*
+- Criterios:
+  - El front **no debe** enviar `registrado_por` en ningún payload: se ignora; siempre sale del token.
+  - Un escaneo en segundo plano (HU-W30) también guarda quién lo subió, pero solo para controlar quién puede consultar el avance; el responsable del **evento** queda definido recién cuando se guarda con `POST /eventos`.
+
 ---
 
 ## Historias transversales (no atadas a un único endpoint)
