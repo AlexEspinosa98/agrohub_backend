@@ -4,6 +4,7 @@ import uuid
 
 import pandas as pd
 from dateutil import parser as dateutil_parser
+from django.conf import settings
 from django.core.files.storage import default_storage
 from django.http import HttpResponse
 from openpyxl.styles import Font, PatternFill
@@ -13,10 +14,10 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
 
-from apps.asistencia_eventos import documentos, services
+from apps.asistencia_eventos import documentos, scan_jobs, services
 from apps.asistencia_eventos.catalogos import COMUNIDADES_INDIGENAS_SUGERIDAS
-from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia
-from apps.asistencia_eventos.ocr_service import extract_asistencia
+from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia, ScanJob
+from apps.asistencia_eventos.ocr_service import contar_paginas, extract_asistencia
 from apps.asistencia_eventos.serializers import (
     EventoConfirmSerializer,
     EventoHeaderUpdateSerializer,
@@ -55,25 +56,17 @@ def scan_evento(request):
     if not upload:
         raise ParseError("Falta el archivo escaneado (campo 'archivo')")
 
-    extracted = extract_asistencia(upload)
+    paginas = contar_paginas(upload)
+    if settings.ASISTENCIA_OCR_ENGINE == "llm" and paginas and paginas > 1:
+        # Con el motor LLM cada página tarda ~2-3 min; más de una no cabe en una petición HTTP
+        # (límite de 300 s) y terminaba en 504 con el trabajo perdido. Mejor avisar claro.
+        raise ParseError(
+            f"Este archivo tiene {paginas} páginas y con el motor actual cada página tarda unos "
+            "2-3 minutos: no cabe en una sola petición. Usa POST /asistencia-eventos/scan-async y "
+            "consulta GET /asistencia-eventos/scan-async/<job_id> hasta que termine."
+        )
 
-    numeros = [a["numero_documento"] for a in extracted["asistentes"] if a.get("numero_documento")]
-    existentes = set(
-        PersonaAsistente.objects.filter(numero_documento__in=numeros).values_list(
-            "numero_documento", flat=True
-        )
-    )
-    for asistente in extracted["asistentes"]:
-        documentos.completar_tipo_documento(asistente)
-        asistente["alerta"] = (
-            documentos.ALERTA_DOCUMENTO_PROVISIONAL
-            if documentos.es_documento_provisional(asistente["numero_documento"])
-            else None
-        )
-        asistente["persona_ya_registrada"] = asistente.get("numero_documento") in existentes
-        asistente["pertenencia_etnica"] = services.etnia_o_ninguna(asistente.get("pertenencia_etnica"))
-        if not asistente.get("municipio") and extracted.get("lugar"):
-            asistente["municipio"] = extracted["lugar"]
+    extracted = services.enriquecer_borrador(extract_asistencia(upload))
 
     return Response(
         {
@@ -82,6 +75,65 @@ def scan_evento(request):
             "data": extracted,
         }
     )
+
+
+def _job_a_dict(job):
+    data = {
+        "job_id": str(job.id),
+        "estado": job.estado,
+        "nombre_archivo": job.nombre_archivo,
+        "paginas_total": job.paginas_total,
+        "paginas_procesadas": job.paginas_procesadas,
+        "creado_en": job.created_at,
+        "actualizado_en": job.updated_at,
+        "completado_en": job.completado_en,
+        "error": job.error_mensaje or None,
+        # Terminado: el borrador completo, con la misma forma que `data` de POST /scan.
+        "resultado": job.resultado if job.estado == ScanJob.ESTADO_COMPLETO else None,
+        # En curso: lo leído hasta la última página terminada (sin enriquecer todavía).
+        "parcial": job.resultado if job.estado == ScanJob.ESTADO_PROCESANDO and job.resultado else None,
+    }
+    return data
+
+
+@api_view(["POST"])
+@authentication_classes(_AUTH)
+@permission_classes(_CUALQUIER_ROL)
+def scan_async(request):
+    """Variante de /scan para hojas de varias páginas: devuelve un `job_id` al instante (202) y el
+    escaneo corre en segundo plano. El front consulta GET /scan-async/<job_id> cada pocos
+    segundos hasta que `estado` sea "completo" (trae `resultado`, igual que `data` de /scan) o
+    "error". El flujo posterior no cambia: se revisa/corrige y se guarda con POST /eventos."""
+    upload = request.FILES.get("archivo")
+    if not upload:
+        raise ParseError("Falta el archivo escaneado (campo 'archivo')")
+
+    job = scan_jobs.crear_job(upload, request.user)
+    scan_jobs.lanzar(job.id)
+    return Response(
+        {
+            "status": status.HTTP_202_ACCEPTED,
+            "message": "Escaneo iniciado — consulta el estado con el job_id",
+            "data": _job_a_dict(job),
+        },
+        status=status.HTTP_202_ACCEPTED,
+    )
+
+
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_CUALQUIER_ROL)
+def scan_async_detail(request, job_id):
+    """Estado/progreso/resultado de un escaneo en segundo plano. Solo lo ve quien lo subió (o un
+    superadmin), igual que los eventos."""
+    try:
+        job = ScanJob.objects.filter(pk=job_id).first()
+    except (ValueError, TypeError):
+        job = None
+    if job is None or (request.user.role != "superadmin" and job.registrado_por_id != request.user.id):
+        raise NotFound("Escaneo no encontrado")
+    job = scan_jobs.sanear_huerfano(job)
+    return Response({"status": status.HTTP_200_OK, "message": "scan", "data": _job_a_dict(job)})
 
 
 def _parse_fecha_ocr(texto):

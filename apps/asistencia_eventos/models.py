@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -89,3 +91,47 @@ class RegistroAsistencia(models.Model):
     class Meta:
         db_table = "registros_asistencia"
         unique_together = [("evento", "persona")]
+
+
+class ScanJob(models.Model):
+    """Escaneo en segundo plano de una hoja (POST /scan-async). Con el motor LLM cada página tarda
+    ~2-3 min, así que una hoja de varias páginas no cabe en una petición HTTP (límite de 300 s en
+    nginx/gunicorn): el front sube el archivo, recibe este job al instante y consulta su estado
+    hasta que termine. El resultado final tiene la misma forma que la respuesta de POST /scan."""
+
+    ESTADO_PENDIENTE = "pendiente"
+    ESTADO_PROCESANDO = "procesando"
+    ESTADO_COMPLETO = "completo"
+    ESTADO_ERROR = "error"
+    ESTADO_CHOICES = [
+        (ESTADO_PENDIENTE, "Pendiente"),
+        (ESTADO_PROCESANDO, "Procesando"),
+        (ESTADO_COMPLETO, "Completo"),
+        (ESTADO_ERROR, "Error"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    estado = models.CharField(max_length=12, choices=ESTADO_CHOICES, default=ESTADO_PENDIENTE)
+    archivo = models.TextField()
+    nombre_archivo = models.CharField(max_length=255, blank=True)
+    paginas_total = models.IntegerField(null=True, blank=True)
+    paginas_procesadas = models.IntegerField(default=0)
+    # Mientras procesa: lo extraído hasta la última página terminada (mismo formato que el
+    # resultado final, para poder ir mostrándolo). Al completar: el borrador final enriquecido.
+    resultado = models.JSONField(default=dict, blank=True)
+    error_mensaje = models.TextField(blank=True)
+    registrado_por = models.ForeignKey(
+        "user_activity.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_column="registrado_por_id",
+        related_name="scan_jobs_asistencia",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completado_en = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "scan_jobs_asistencia"
+        ordering = ["-created_at"]

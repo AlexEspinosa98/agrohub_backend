@@ -31,13 +31,16 @@ hallucinating a plausible-looking but wrong ID number.
 """
 
 import base64
+import contextlib
+import fcntl
 import io
 import json
 import re
+import tempfile
 
 import requests
 from django.conf import settings
-from pdf2image import convert_from_bytes
+from pdf2image import convert_from_bytes, pdfinfo_from_bytes
 from PIL import Image
 from rest_framework import status as http_status
 from rest_framework.exceptions import APIException
@@ -406,6 +409,37 @@ usa la columna donde está la marca, no un valor por defecto.
 4. Ignora firmas, huellas o marcas en columnas que no correspondan a estos campos."""
 
 
+_LOCK_LLM = tempfile.gettempdir() + "/agrohub-ocr-llm.lock"
+
+
+@contextlib.contextmanager
+def _turno_llm():
+    """Un solo envío a llama-server a la vez, entre TODOS los procesos de gunicorn (candado de
+    archivo). El modelo corre en CPU: dos páginas a la vez no van más rápido, cada una tarda el
+    doble — y si una petición se cae a mitad, evita que se amontonen hojas en el servidor."""
+    with open(_LOCK_LLM, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
+
+
+def contar_paginas(upload_file):
+    """Páginas del PDF sin renderizarlas (lectura rápida de poppler); 1 para una imagen suelta;
+    None si no se pudo determinar."""
+    upload_file.seek(0)
+    raw = upload_file.read()
+    upload_file.seek(0)
+    name = (upload_file.name or "").lower()
+    if not (name.endswith(".pdf") or raw[:4] == b"%PDF"):
+        return 1
+    try:
+        return int(pdfinfo_from_bytes(raw)["Pages"])
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _encode_page_png_b64(image) -> str:
     buf = io.BytesIO()
     image.save(buf, format="PNG")
@@ -438,7 +472,8 @@ def _run_llm_ocr(image) -> dict:
         "temperature": 0,
     }
     try:
-        response = requests.post(settings.ASISTENCIA_LLM_OCR_URL, json=payload, timeout=300)
+        with _turno_llm():
+            response = requests.post(settings.ASISTENCIA_LLM_OCR_URL, json=payload, timeout=300)
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         return json.loads(content)
@@ -448,20 +483,7 @@ def _run_llm_ocr(image) -> dict:
         raise OcrUnavailable(detail="El servicio de OCR (LLM local) devolvió una respuesta inesperada") from exc
 
 
-def _extract_with_llm(pages: list) -> dict:
-    header = {}
-    asistentes = []
-    raw_parts = []
-    for page in pages:
-        page_data = _run_llm_ocr(page)
-        raw_parts.append(json.dumps(page_data, ensure_ascii=False))
-        for campo in ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final"):
-            if not header.get(campo) and page_data.get(campo):
-                header[campo] = page_data[campo]
-        for asistente in page_data.get("asistentes") or []:
-            asistente["tipo_documento"] = None
-            asistentes.append(asistente)
-
+def _resultado_llm(header, asistentes, raw_parts):
     return {
         "tema": header.get("tema"),
         "responsable": header.get("responsable"),
@@ -474,14 +496,35 @@ def _extract_with_llm(pages: list) -> dict:
     }
 
 
-def extract_asistencia(upload_file) -> dict:
+def _extract_with_llm(pages: list, on_progress=None) -> dict:
+    header = {}
+    asistentes = []
+    raw_parts = []
+    for numero, page in enumerate(pages, start=1):
+        page_data = _run_llm_ocr(page)
+        raw_parts.append(json.dumps(page_data, ensure_ascii=False))
+        for campo in ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final"):
+            if not header.get(campo) and page_data.get(campo):
+                header[campo] = page_data[campo]
+        for asistente in page_data.get("asistentes") or []:
+            asistente["tipo_documento"] = None
+            asistentes.append(asistente)
+        if on_progress:
+            on_progress(len(pages), numero, _resultado_llm(header, asistentes, raw_parts))
+
+    return _resultado_llm(header, asistentes, raw_parts)
+
+
+def extract_asistencia(upload_file, on_progress=None) -> dict:
+    """`on_progress(paginas_total, paginas_hechas, resultado_parcial)` se llama al terminar cada
+    página con el motor LLM (el que tarda minutos); con PaddleOCR es todo de una vez."""
     try:
         pages = _load_pages(upload_file)
     except Exception as exc:  # noqa: BLE001
         raise OcrUnavailable(detail=f"No se pudo leer el archivo: {exc}") from exc
 
     if settings.ASISTENCIA_OCR_ENGINE == "llm":
-        resultado = _extract_with_llm(pages)
+        resultado = _extract_with_llm(pages, on_progress)
     else:
         resultado = _extract_with_paddleocr(pages)
     # Tipo de documento: el escrito en la hoja si vino pegado al número, si no por edad (CC/TI).

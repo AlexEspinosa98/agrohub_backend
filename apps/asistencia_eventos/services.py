@@ -323,3 +323,25 @@ def asistentes_para_export(evento_id=None, usuario=None) -> list:
         }
         for r in qs
     ]
+
+
+def enriquecer_borrador(extracted: dict) -> dict:
+    """Prepara el borrador de un escaneo para que el front lo revise: tipo de documento, alerta
+    de documento provisional, si la persona ya existe, etnia por defecto y municipio = lugar del
+    evento cuando falta. Compartido por POST /scan (síncrono) y POST /scan-async (segundo plano)."""
+    numeros = [a["numero_documento"] for a in extracted["asistentes"] if a.get("numero_documento")]
+    existentes = set(
+        PersonaAsistente.objects.filter(numero_documento__in=numeros).values_list(
+            "numero_documento", flat=True
+        )
+    )
+    for asistente in extracted["asistentes"]:
+        completar_tipo_documento(asistente)
+        asistente["alerta"] = (
+            ALERTA_DOCUMENTO_PROVISIONAL if es_documento_provisional(asistente["numero_documento"]) else None
+        )
+        asistente["persona_ya_registrada"] = asistente.get("numero_documento") in existentes
+        asistente["pertenencia_etnica"] = etnia_o_ninguna(asistente.get("pertenencia_etnica"))
+        if not asistente.get("municipio") and extracted.get("lugar"):
+            asistente["municipio"] = extracted["lugar"]
+    return extracted

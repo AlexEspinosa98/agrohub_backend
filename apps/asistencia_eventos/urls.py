@@ -4,6 +4,8 @@ from apps.asistencia_eventos import views
 
 urlpatterns = [
     path("scan", views.scan_evento, name="asistencia_scan"),
+    path("scan-async", views.scan_async, name="asistencia_scan_async"),
+    path("scan-async/<uuid:job_id>", views.scan_async_detail, name="asistencia_scan_async_detail"),
     path("scan-bulk", views.scan_bulk, name="asistencia_scan_bulk"),
     path("eventos", views.eventos_list_create, name="asistencia_eventos_list_create"),
     path("eventos/<int:evento_id>", views.evento_detail, name="asistencia_evento_detail"),
