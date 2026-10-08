@@ -37,6 +37,10 @@ def separar_tipo_y_numero(valor):
         return None, valor
     coincide = _PREFIJO_RE.match(str(valor))
     if not coincide:
+        # Sin tipo escrito pero con puntos/espacios de miles ("1.081.806.419", "1 081 806 419"):
+        # el documento se guarda solo con dígitos para que sea el mismo número siempre.
+        if re.fullmatch(r"\s*\d[\d.\s]*", str(valor)):
+            return None, re.sub(r"\D", "", str(valor))
         return None, valor
     return normalizar_tipo(coincide.group(1)), re.sub(r"\D", "", coincide.group(2))
 
