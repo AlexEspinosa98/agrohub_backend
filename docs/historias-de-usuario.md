@@ -180,7 +180,9 @@ Como usuario del panel, quiero ver la cobertura desagregada por vereda dentro de
 Como usuario del panel, quiero descargar un Excel con todas las encuestas activas, separadas en una hoja por municipio, para análisis externo o para reportar a los financiadores del proyecto.
 - `GET /encuesta-nutricional/export/excel`
 
-### Asistencia a eventos con OCR (`asistencia_eventos`, solo admin/superadmin)
+### Asistencia a eventos con OCR (`asistencia_eventos`, cualquier rol autenticado; ficha de persona solo admin/superadmin)
+
+> Versión consolidada para el front, con las reglas vigentes: [`HU_ASISTENCIA_EVENTOS.md`](HU_ASISTENCIA_EVENTOS.md).
 
 **HU-W18 — Digitalizar una hoja de asistencia escaneada**
 Como responsable de un evento, quiero subir la foto/PDF de la hoja de asistencia que se llenó a mano, y que el sistema me devuelva ya extraído el tema, responsable, lugar, fecha, horas y la lista de asistentes, para no tener que digitarlo todo desde cero.
