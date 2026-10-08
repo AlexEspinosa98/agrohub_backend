@@ -285,6 +285,44 @@ Como usuario del panel, quiero que si un asistente no trae municipio se use el l
 Como usuario del panel, quiero que todo asistente quede con un tipo de documento, para no tener que completarlo a mano.
 - Se respeta el tipo escrito en la hoja; si no hay, por edad (18+ → `CC`, menor → `TI`); si tampoco hay edad → `CC` por defecto (ajusta HU-W24, que antes lo dejaba vacío). Sin documento → `PROV` (HU-W26).
 
+**HU-W30 — Digitalizar hojas de varias páginas sin que se caiga (escaneo en segundo plano)**
+Como usuario del panel, quiero subir una hoja de asistencia de varias páginas y poder seguir viendo el avance mientras se procesa, para no quedarme con la pantalla colgada ni perder el trabajo cuando el archivo es largo.
+- **Por qué existe:** con el motor LLM cada página tarda ~2-3 minutos y una petición HTTP aguanta máximo 5. Una hoja de 5 páginas (~43 asistentes) tarda 10-15 minutos, así que `POST /scan` no puede terminarla: el servidor cortaba la petición y el trabajo se perdía.
+- **Flujo (3 pasos, el resto del flujo no cambia):**
+  1. `POST /asistencia-eventos/scan-async` (multipart, campo `archivo`) → `202` al instante con el `job_id`.
+  2. `GET /asistencia-eventos/scan-async/<job_id>` cada **5-10 s** hasta que `estado` sea `completo` o `error`.
+  3. Con `estado = "completo"`, `data.resultado` trae **exactamente lo mismo que `data` de `POST /scan`** (tema, responsable, lugar, fecha, horas, `asistentes[]` con `alerta`, `persona_ya_registrada`, tipo de documento, etc.). Desde ahí se revisa y se guarda con `POST /eventos` igual que siempre (reenviando el mismo archivo como `archivo`).
+- **Respuesta de ambos endpoints** (`data`):
+  ```json
+  {
+    "job_id": "3f1c7c1e-8a4b-4f63-9a52-0d1b7f6a9c11",
+    "estado": "procesando",
+    "nombre_archivo": "Primera sesión Modelo de Negocio Algarro.pdf",
+    "paginas_total": 5,
+    "paginas_procesadas": 2,
+    "creado_en": "...", "actualizado_en": "...", "completado_en": null,
+    "error": null,
+    "resultado": null,
+    "parcial": { "tema": "...", "asistentes": [ ...los leídos hasta la página 2... ] }
+  }
+  ```
+  - `estado`: `pendiente` → `procesando` → `completo` | `error`.
+  - `paginas_procesadas / paginas_total` sirve para una barra de progreso real (se actualiza al terminar cada página).
+  - `parcial` (solo mientras `procesando`): lo leído hasta la última página terminada, **sin** enriquecer (sin alertas ni `persona_ya_registrada`); sirve para ir mostrando filas, pero el dato definitivo es `resultado`.
+  - `resultado` (solo con `completo`): el borrador final.
+  - `error` (con `estado = "error"`): mensaje legible para mostrar al usuario.
+- **Qué debe hacer el front:**
+  - Usar `scan-async` para cualquier PDF (es seguro también con 1 página). Mostrar progreso con `paginas_procesadas`/`paginas_total` y dejar claro que tarda unos minutos por página.
+  - Permitir que el usuario **salga de la pantalla** y vuelva: guardar el `job_id` (por ejemplo en `localStorage`) y retomar el `GET`.
+  - Dejar de consultar cuando `estado` sea `completo` o `error`. Ante `error`, ofrecer "volver a subir".
+- Criterios del backend:
+  - `POST /scan` (síncrono) **sigue funcionando** para hojas de una página. Si el PDF tiene más de una página y el motor es el LLM, responde `400` con el mensaje "…usa POST /asistencia-eventos/scan-async…" en vez de dejar morir la petición.
+  - Un escaneo solo lo ve quien lo subió (o un superadmin); otro usuario recibe `404`.
+  - Solo se procesa **una página a la vez** en todo el servidor: si dos personas suben a la vez, la segunda espera su turno (cada una tarda lo mismo que sola, en vez de las dos el doble). El `estado` queda en `procesando` mientras espera.
+  - Si el servicio se reinicia a mitad de un escaneo, el job queda `error` ("quedó sin avanzar más de 15 minutos") la próxima vez que se consulte; hay que volver a subir.
+  - Los archivos del escaneo quedan guardados en el servidor (`media/asistencia_eventos/scans/`).
+- Límite conocido: `POST /scan-bulk` (carga masiva sin revisión) sigue siendo síncrono, así que con el motor LLM solo aguanta 1-2 hojas de una página por petición.
+
 ---
 
 ## Historias transversales (no atadas a un único endpoint)
