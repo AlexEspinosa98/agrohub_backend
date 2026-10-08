@@ -287,6 +287,8 @@ def _listar_eventos(request):
             "fecha": e.fecha,
             "total_asistentes": e.asistentes.count(),
             "registrado_por": e.registrado_por.name if e.registrado_por else None,
+            "registrado_por_id": e.registrado_por_id,
+            "registrado_por_correo": e.registrado_por.email if e.registrado_por else None,
             "editado_por": e.editado_por.name if e.editado_por else None,
         }
         for e in eventos
@@ -467,6 +469,8 @@ def _obtener_evento_detail(request, evento_id: int):
                     default_storage.url(evento.documento_escaneado) if evento.documento_escaneado else None
                 ),
                 "registrado_por": evento.registrado_por.name if evento.registrado_por else None,
+                "registrado_por_id": evento.registrado_por_id,
+                "registrado_por_correo": evento.registrado_por.email if evento.registrado_por else None,
                 "editado_por": evento.editado_por.name if evento.editado_por else None,
                 "actualizado_en": evento.updated_at,
                 "asistentes": asistentes,
