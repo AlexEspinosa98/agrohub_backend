@@ -201,6 +201,9 @@ RIEGO_IOT_MOSQUITTO_ACL_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_ACL_FILE", "/etc/m
 # por posición, a costa de ser más lento por página. Ver docs/asistencia-eventos.md.
 # ---------------------------------------------------------------------------
 ASISTENCIA_OCR_ENGINE = os.getenv("ASISTENCIA_OCR_ENGINE", "paddleocr")
+# Páginas que se envían al LLM a la vez. Debe ser <= --parallel de llama-server (ver
+# systemd/agrohub-ocr-llm.service); con 1 se procesan en fila, como antes.
+ASISTENCIA_LLM_PARALELISMO = int(os.getenv("ASISTENCIA_LLM_PARALELISMO", "1"))
 ASISTENCIA_LLM_OCR_URL = os.getenv("ASISTENCIA_LLM_OCR_URL", "http://127.0.0.1:8010/v1/chat/completions")
 
 LOGGING = {

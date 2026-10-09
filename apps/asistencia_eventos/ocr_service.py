@@ -37,6 +37,8 @@ import io
 import json
 import re
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 from django.conf import settings
@@ -409,20 +411,37 @@ usa la columna donde está la marca, no un valor por defecto.
 4. Ignora firmas, huellas o marcas en columnas que no correspondan a estos campos."""
 
 
-_LOCK_LLM = tempfile.gettempdir() + "/agrohub-ocr-llm.lock"
+_LOCK_LLM = tempfile.gettempdir() + "/agrohub-ocr-llm"
+
+
+def _paralelismo() -> int:
+    return max(1, int(getattr(settings, "ASISTENCIA_LLM_PARALELISMO", 1)))
 
 
 @contextlib.contextmanager
 def _turno_llm():
-    """Un solo envío a llama-server a la vez, entre TODOS los procesos de gunicorn (candado de
-    archivo). El modelo corre en CPU: dos páginas a la vez no van más rápido, cada una tarda el
-    doble — y si una petición se cae a mitad, evita que se amontonen hojas en el servidor."""
-    with open(_LOCK_LLM, "w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(lock, fcntl.LOCK_UN)
+    """Cupo en llama-server compartido entre TODOS los procesos de gunicorn: hay tantos candados
+    de archivo como ranuras (`--parallel`) tenga el servidor (ASISTENCIA_LLM_PARALELISMO), y cada
+    envío toma una libre. Con 1 es una fila estricta; con N caben N páginas a la vez, y las demás
+    esperan su turno en vez de amontonarse y agotar el contexto del servidor."""
+    n = _paralelismo()
+    lock = None
+    while lock is None:
+        for i in range(n):
+            candidato = open(f"{_LOCK_LLM}-{i}.lock", "w")
+            try:
+                fcntl.flock(candidato, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                lock = candidato
+                break
+            except BlockingIOError:
+                candidato.close()
+        else:
+            time.sleep(0.5)
+    try:
+        yield
+    finally:
+        fcntl.flock(lock, fcntl.LOCK_UN)
+        lock.close()
 
 
 def contar_paginas(upload_file):
@@ -497,22 +516,31 @@ def _resultado_llm(header, asistentes, raw_parts):
 
 
 def _extract_with_llm(pages: list, on_progress=None) -> dict:
-    header = {}
-    asistentes = []
-    raw_parts = []
-    for numero, page in enumerate(pages, start=1):
-        page_data = _run_llm_ocr(page)
-        raw_parts.append(json.dumps(page_data, ensure_ascii=False))
-        for campo in ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final"):
-            if not header.get(campo) and page_data.get(campo):
-                header[campo] = page_data[campo]
-        for asistente in page_data.get("asistentes") or []:
-            asistente["tipo_documento"] = None
-            asistentes.append(asistente)
-        if on_progress:
-            on_progress(len(pages), numero, _resultado_llm(header, asistentes, raw_parts))
+    """Las páginas se mandan al LLM en paralelo (hasta ASISTENCIA_LLM_PARALELISMO a la vez; el
+    candado de `_turno_llm` limita el total entre procesos). El resultado se arma SIEMPRE en el
+    orden de las páginas, sin importar cuál termine primero."""
+    paginas_ok = {}  # índice de página -> datos
 
-    return _resultado_llm(header, asistentes, raw_parts)
+    def combinar():
+        header, asistentes, raw_parts = {}, [], []
+        for indice in sorted(paginas_ok):
+            page_data = paginas_ok[indice]
+            raw_parts.append(json.dumps(page_data, ensure_ascii=False))
+            for campo in ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final"):
+                if not header.get(campo) and page_data.get(campo):
+                    header[campo] = page_data[campo]
+            for asistente in page_data.get("asistentes") or []:
+                asistente["tipo_documento"] = None
+                asistentes.append(asistente)
+        return _resultado_llm(header, asistentes, raw_parts)
+
+    with ThreadPoolExecutor(max_workers=min(_paralelismo(), len(pages)) or 1) as pool:
+        futuros = {pool.submit(_run_llm_ocr, page): i for i, page in enumerate(pages)}
+        for futuro in as_completed(futuros):
+            paginas_ok[futuros[futuro]] = futuro.result()  # propaga OcrUnavailable
+            if on_progress:
+                on_progress(len(pages), len(paginas_ok), combinar())
+    return combinar()
 
 
 def extract_asistencia(upload_file, on_progress=None) -> dict:
