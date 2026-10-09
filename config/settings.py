@@ -29,6 +29,7 @@ INSTALLED_APPS = [
     "apps.hub_cgsm",
     "apps.encuesta_nutricional",
     "apps.asistencia_eventos",
+    "apps.agrohubs",
     "apps.riego_iot",
 ]
 
