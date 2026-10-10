@@ -131,6 +131,11 @@ class ScanJob(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completado_en = models.DateTimeField(null=True, blank=True)
+    # /scan-bulk: al terminar la lectura el evento se guarda solo, sin revisión humana.
+    guardar_directo = models.BooleanField(default=False)
+    evento = models.ForeignKey(
+        "asistencia_eventos.Evento", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
 
     class Meta:
         db_table = "scan_jobs_asistencia"

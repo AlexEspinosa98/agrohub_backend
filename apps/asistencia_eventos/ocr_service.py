@@ -406,9 +406,17 @@ Reglas importantes:
 son identificadores reales, no los redondees ni corrijas.
 2. Si un campo es ilegible o no estás seguro, devuelve null — NUNCA inventes un valor solo porque \
 parezca razonable. Es preferible null a un dato incorrecto.
-3. genero y pertenencia_etnica normalmente se marcan con una X o un check dentro de una columna: \
-usa la columna donde está la marca, no un valor por defecto.
-4. Ignora firmas, huellas o marcas en columnas que no correspondan a estos campos."""
+3. pertenencia_etnica: la planilla tiene la pregunta "¿Te reconoces dentro de algún pueblo o \
+comunidad particular?" con 5 casillas, EN ESTE ORDEN de izquierda a derecha: Ninguno, Ind (indigena), \
+Afro (afro), Rom (rom), Rai (raizal). Cada persona marca UNA sola casilla con un check o una X. \
+Mira la fila de esa persona y devuelve la casilla que tiene la marca: marca bajo "Afro" -> "afro", \
+bajo "Ind" -> "indigena", bajo "Rom" -> "rom", bajo "Rai" -> "raizal", bajo "Ninguno" -> "ninguno". \
+Decide fila por fila: NO copies el valor de la fila anterior ni repitas el mismo valor en toda la \
+página; es normal que filas distintas tengan casillas distintas. Si la fila no tiene ninguna marca \
+visible, devuelve null (no "indigena" ni "ninguno").
+4. genero se marca con una X o un check dentro de su columna: usa la columna donde está la marca, \
+no un valor por defecto.
+5. Ignora firmas, huellas o marcas en columnas que no correspondan a estos campos."""
 
 
 _LOCK_LLM = tempfile.gettempdir() + "/agrohub-ocr-llm"

@@ -85,7 +85,7 @@ puede interpretar, dejar el input vacío para que lo escriba el usuario.
 |---|---|---|
 | Escanear (1 página) | `POST /scan` | cualquiera con rol |
 | Escanear (cualquier PDF, en segundo plano) | `POST /scan-async` · `GET /scan-async/<job_id>` | cualquiera con rol |
-| Carga masiva sin revisión | `POST /scan-bulk` | cualquiera con rol |
+| Carga masiva sin revisión (segundo plano) | `POST /scan-bulk` → consultar `GET /scan-async/<job_id>` | cualquiera con rol |
 | Guardar evento | `POST /eventos` | cualquiera con rol |
 | Listar eventos | `GET /eventos` | cualquiera con rol |
 | Detalle / editar encabezado / eliminar | `GET` · `PUT` · `DELETE /eventos/<id>` | cualquiera con rol |
@@ -206,32 +206,34 @@ Respuesta de ambos (`data`):
 - Si el servicio se reinicia a mitad de un escaneo, el job pasa a `error` ("quedó sin avanzar más
   de 15 minutos…") la próxima vez que se consulte. Hay que volver a subir.
 
-### HU-W32 — Carga masiva sin revisión (opcional)
+### HU-W32 — Carga masiva sin revisión (en segundo plano)
 
-**Como** usuario del panel, **quiero** subir varias hojas de una vez y que se guarden directamente,
-**para** cargar rápido un lote cuando no es necesario revisar fila por fila.
+**Como** usuario del panel, **quiero** subir varios documentos de una vez y que se procesen y guarden
+solos, **para** cargar un lote sin esperar con la pantalla abierta.
 
-- `POST /asistencia-eventos/scan-bulk` · multipart · campo **`archivos`** repetido (uno por archivo).
+- `POST /asistencia-eventos/scan-bulk` · multipart · campo **`archivos`** repetido (uno por
+  archivo, máximo 30) → **`202` al instante** con un `job_id` por archivo. *(Antes era síncrono y
+  con 5 archivos daba timeout.)*
+- El front consulta **`GET /asistencia-eventos/scan-async/<job_id>`** de cada uno (cada 5 a 10 s)
+  hasta que `estado` sea `completo` o `error`. En los jobs de carga masiva, `guardado_directo` es
+  `true` y, al completar, `evento_id` trae el evento ya guardado (verlo con `GET /eventos/<id>`).
 - **No hay paso de revisión**: se guarda lo que el OCR leyó, tal cual. Los errores de lectura
   (nombres, etnia, género) quedan guardados y se corrigen después con las ediciones de la
   sección 5. El front debe advertirlo antes de enviar.
-- Cada archivo se procesa y guarda por separado; uno que falle no detiene a los demás.
+- Cada archivo se procesa y guarda por separado; uno que falle (`estado: "error"`, con `error`) no
+  detiene a los demás. El archivo original queda enlazado al evento (`documento_escaneado`).
+- Los PDF de varias páginas también funcionan (cada hoja se lee en paralelo página a página).
 
 ```json
 {
-  "status": 200,
-  "message": "2 de 3 documento(s) guardados",
+  "status": 202,
+  "message": "3 documento(s) en proceso — consulta cada job_id en scan-async",
   "data": [
-    {"archivo": "hoja1.pdf", "status": "guardado", "evento_id": 5, "total_asistentes": 10},
-    {"archivo": "hoja2.pdf", "status": "error", "detalle": "..."},
-    {"archivo": "hoja3.pdf", "status": "guardado", "evento_id": 6, "total_asistentes": 8}
+    {"archivo": "hoja1.pdf", "job_id": "696bb5da-...", "estado": "pendiente"},
+    {"archivo": "hoja2.pdf", "job_id": "3f5efb15-...", "estado": "pendiente"}
   ]
 }
 ```
-
-- **Límite:** es síncrono; con el motor actual solo aguanta **1 a 2 hojas de una página** por
-  petición antes del tiempo máximo. Para hojas de varias páginas usar HU-W30 y guardar con
-  revisión.
 
 ---
 

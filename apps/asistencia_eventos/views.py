@@ -3,7 +3,6 @@ import json
 import uuid
 
 import pandas as pd
-from dateutil import parser as dateutil_parser
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.http import HttpResponse
@@ -92,6 +91,9 @@ def _job_a_dict(job):
         "resultado": job.resultado if job.estado == ScanJob.ESTADO_COMPLETO else None,
         # En curso: lo leído hasta la última página terminada (sin enriquecer todavía).
         "parcial": job.resultado if job.estado == ScanJob.ESTADO_PROCESANDO and job.resultado else None,
+        # Solo en jobs de /scan-bulk (se guardan solos al terminar):
+        "guardado_directo": job.guardar_directo,
+        "evento_id": job.evento_id,
     }
     return data
 
@@ -136,95 +138,40 @@ def scan_async_detail(request, job_id):
     return Response({"status": status.HTTP_200_OK, "message": "scan", "data": _job_a_dict(job)})
 
 
-def _parse_fecha_ocr(texto):
-    """El OCR devuelve la fecha/hora tal como aparecen escritas en la hoja (ej. "28/08/2026",
-    "8:30 am") — el flujo normal (/scan → revisión humana → /eventos) confía en que el frontend
-    las convierta a los formatos que esperan DateField/TimeField (ISO) al armar el payload de
-    confirmación. /scan-bulk no tiene ese paso humano, así que hace esa conversión aquí mismo;
-    si el texto no es un formato de fecha/hora reconocible, devuelve None en vez de fallar —
-    EventoConfirmSerializer ya acepta fecha/hora_inicio/hora_final en null."""
-    if not texto:
-        return None
-    try:
-        return dateutil_parser.parse(texto, dayfirst=True).date()
-    except (ValueError, OverflowError):
-        return None
-
-
-def _parse_hora_ocr(texto):
-    if not texto:
-        return None
-    try:
-        return dateutil_parser.parse(texto).time()
-    except (ValueError, OverflowError):
-        return None
+MAX_ARCHIVOS_BULK = 30
 
 
 @api_view(["POST"])
 @authentication_classes(_AUTH)
 @permission_classes(_CUALQUIER_ROL)
 def scan_bulk(request):
-    """Sube y GUARDA DIRECTAMENTE varios documentos a la vez — sin el paso de revisión
-    humana de /scan + /eventos. Usa tal cual lo que el motor de OCR configurado
-    (settings.ASISTENCIA_OCR_ENGINE) haya extraído de cada archivo.
+    """Sube varios documentos a la vez y los GUARDA directamente, sin el paso de revisión humana
+    de /scan + /eventos. Corre en segundo plano: responde 202 al instante con un `job_id` POR
+    ARCHIVO (antes era síncrono y con 5 archivos se cortaba por timeout, porque con el motor LLM
+    cada hoja tarda minutos). El front consulta GET /scan-async/<job_id> de cada uno hasta que
+    `estado` sea "completo" (trae `evento_id` y `total_asistentes`) o "error". Cada archivo se
+    procesa y guarda por separado: uno que falle no detiene a los demás.
 
-    ADVERTENCIA: sin revisión, cualquier error del OCR queda guardado tal cual — nombres mal
-    transcritos, y en particular, si ASISTENCIA_OCR_ENGINE=llm, el campo pertenencia_etnica es
-    conocido por no ser confiable (ver docs/asistencia-eventos.md). Usar solo cuando la
-    velocidad importa más que la exactitud, aceptando que haya que corregir datos después.
-
-    Cada archivo se procesa y GUARDA de forma independiente, uno a la vez, en el mismo orden
-    en que llegó — si el archivo 3 de 10 falla (OCR ilegible, datos inválidos, etc.), los
-    archivos 1 y 2 ya quedaron guardados y el 4 en adelante se sigue procesando; el resultado
-    por archivo indica cuál se guardó y cuál no. Importante: con el motor LLM cada página tarda
-    ~90-180s en el hardware de producción — el timeout de nginx/gunicorn (300s) limita cuántos
-    archivos caben con seguridad en un solo request antes de que la conexión se corte. Si eso
-    pasa, los archivos ya procesados hasta ese punto quedan guardados igual (se guardan uno a
-    uno, no todos al final) — solo que el cliente no ve la respuesta; conviene revisar
-    GET /eventos después si un request de este endpoint se corta."""
+    ADVERTENCIA: sin revisión, cualquier error del OCR queda guardado tal cual (nombres mal
+    transcritos, género/pertenencia étnica poco confiables — ver docs/asistencia-eventos.md)."""
     archivos = request.FILES.getlist("archivos")
     if not archivos:
         raise ParseError("Falta al menos un archivo (campo 'archivos')")
+    if len(archivos) > MAX_ARCHIVOS_BULK:
+        raise ParseError(f"Máximo {MAX_ARCHIVOS_BULK} archivos por envío")
 
-    resultados = []
+    data = []
     for upload in archivos:
-        try:
-            extracted = extract_asistencia(upload)
-            payload = {
-                "tema": extracted.get("tema") or "(sin tema — completar manualmente)",
-                "responsable": extracted.get("responsable"),
-                "lugar": extracted.get("lugar"),
-                "fecha": _parse_fecha_ocr(extracted.get("fecha")),
-                "hora_inicio": _parse_hora_ocr(extracted.get("hora_inicio")),
-                "hora_final": _parse_hora_ocr(extracted.get("hora_final")),
-                "asistentes": extracted.get("asistentes") or [],
-            }
-            serializer = EventoConfirmSerializer(data=payload)
-            serializer.is_valid(raise_exception=True)
-            data = serializer.validated_data
-
-            documento_path = _save_scan(upload)
-            evento = services.guardar_evento(
-                data, documento_path, extracted.get("texto_crudo_ocr"), registrado_por=request.user
-            )
-            resultados.append(
-                {
-                    "archivo": upload.name,
-                    "status": "guardado",
-                    "evento_id": evento.id,
-                    "total_asistentes": evento.asistentes.count(),
-                }
-            )
-        except Exception as exc:  # noqa: BLE001 — un archivo fallando no debe tumbar el resto del lote
-            resultados.append({"archivo": upload.name, "status": "error", "detalle": str(exc)})
-
-    guardados = sum(1 for r in resultados if r["status"] == "guardado")
+        job = scan_jobs.crear_job(upload, request.user, guardar_directo=True)
+        scan_jobs.lanzar(job.id)
+        data.append({"archivo": upload.name, "job_id": str(job.id), "estado": job.estado})
     return Response(
         {
-            "status": status.HTTP_200_OK,
-            "message": f"{guardados} de {len(archivos)} documento(s) guardados",
-            "data": resultados,
-        }
+            "status": status.HTTP_202_ACCEPTED,
+            "message": f"{len(data)} documento(s) en proceso — consulta cada job_id en scan-async",
+            "data": data,
+        },
+        status=status.HTTP_202_ACCEPTED,
     )
 
 

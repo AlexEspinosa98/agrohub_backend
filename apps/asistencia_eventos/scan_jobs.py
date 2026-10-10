@@ -10,7 +10,7 @@ from django.core.files.storage import default_storage
 from django.db import close_old_connections
 from django.utils import timezone
 
-from apps.asistencia_eventos import services
+from apps.asistencia_eventos import parseo, services
 from apps.asistencia_eventos.models import ScanJob
 from apps.asistencia_eventos.ocr_service import OcrUnavailable, contar_paginas, extract_asistencia
 
@@ -19,7 +19,7 @@ from apps.asistencia_eventos.ocr_service import OcrUnavailable, contar_paginas, 
 UMBRAL_HUERFANO = timedelta(minutes=15)
 
 
-def crear_job(upload, user) -> ScanJob:
+def crear_job(upload, user, guardar_directo=False) -> ScanJob:
     paginas = contar_paginas(upload)
     ruta = default_storage.save(f"asistencia_eventos/scans/{uuid.uuid4()}_{upload.name}", upload)
     return ScanJob.objects.create(
@@ -27,6 +27,7 @@ def crear_job(upload, user) -> ScanJob:
         nombre_archivo=upload.name or "",
         paginas_total=paginas,
         registrado_por=user,
+        guardar_directo=guardar_directo,
     )
 
 
@@ -53,7 +54,10 @@ def _procesar(job_id) -> None:
             extracted = extract_asistencia(archivo, on_progress=avance)
         extracted = services.enriquecer_borrador(extracted)
 
+        evento_id = _guardar_directo(job, extracted) if job.guardar_directo else None
+
         ScanJob.objects.filter(pk=job_id).update(
+            evento_id=evento_id,
             estado=ScanJob.ESTADO_COMPLETO,
             paginas_procesadas=job.paginas_total or 0,
             resultado=extracted,
@@ -67,6 +71,29 @@ def _procesar(job_id) -> None:
         _marcar_error(job_id, f"Error inesperado: {exc}")
     finally:
         close_old_connections()
+
+
+def _guardar_directo(job: ScanJob, extracted: dict) -> int:
+    """/scan-bulk: arma el evento con lo que leyó el OCR (sin revisión humana) y lo guarda,
+    enlazando el archivo que ya quedó en disco al subirlo."""
+    from apps.asistencia_eventos.serializers import EventoConfirmSerializer
+
+    payload = {
+        "tema": extracted.get("tema") or "(sin tema — completar manualmente)",
+        "responsable": extracted.get("responsable"),
+        "lugar": extracted.get("lugar"),
+        "fecha": parseo.parse_fecha_ocr(extracted.get("fecha")),
+        "hora_inicio": parseo.parse_hora_ocr(extracted.get("hora_inicio")),
+        "hora_final": parseo.parse_hora_ocr(extracted.get("hora_final")),
+        "asistentes": extracted.get("asistentes") or [],
+    }
+    serializer = EventoConfirmSerializer(data=payload)
+    serializer.is_valid(raise_exception=True)
+    evento = services.guardar_evento(
+        serializer.validated_data, job.archivo, extracted.get("texto_crudo_ocr"),
+        registrado_por=job.registrado_por,
+    )
+    return evento.id
 
 
 def _marcar_error(job_id, mensaje) -> None:
