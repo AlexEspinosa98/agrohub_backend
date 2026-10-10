@@ -492,7 +492,9 @@ def _run_llm_ocr(image) -> dict:
     }
     try:
         with _turno_llm():
-            response = requests.post(settings.ASISTENCIA_LLM_OCR_URL, json=payload, timeout=300)
+            response = requests.post(
+                settings.ASISTENCIA_LLM_OCR_URL, json=payload, timeout=settings.ASISTENCIA_LLM_TIMEOUT
+            )
         response.raise_for_status()
         content = response.json()["choices"][0]["message"]["content"]
         return json.loads(content)

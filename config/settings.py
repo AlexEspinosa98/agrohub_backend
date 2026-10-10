@@ -204,6 +204,9 @@ ASISTENCIA_OCR_ENGINE = os.getenv("ASISTENCIA_OCR_ENGINE", "paddleocr")
 # Páginas que se envían al LLM a la vez. Debe ser <= --parallel de llama-server (ver
 # systemd/agrohub-ocr-llm.service); con 1 se procesan en fila, como antes.
 ASISTENCIA_LLM_PARALELISMO = int(os.getenv("ASISTENCIA_LLM_PARALELISMO", "1"))
+# Segundos que se espera la respuesta de UNA página. Con varias páginas en paralelo la lectura de
+# las imágenes (CPU) se reparte entre todas, así que cada una tarda más que sola: 300 s no alcanza.
+ASISTENCIA_LLM_TIMEOUT = int(os.getenv("ASISTENCIA_LLM_TIMEOUT", "1200"))
 ASISTENCIA_LLM_OCR_URL = os.getenv("ASISTENCIA_LLM_OCR_URL", "http://127.0.0.1:8010/v1/chat/completions")
 
 LOGGING = {
