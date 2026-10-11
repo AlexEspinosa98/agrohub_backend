@@ -40,12 +40,12 @@ Base URL: `https://back.alunaia.co/api/agrohub/agrohubs/` · Auth: `Authorizatio
 |---|---|---|
 | Puntos para el mapa | `GET /puntos` | **público** (sin token) |
 | Detalle de un AgroHub | `GET /<id>` | **público** (sin token) |
-| Listar (tabla admin) | `GET /` | admin, superadmin |
-| Crear | `POST /` | admin, superadmin |
-| Editar | `PUT /<id>` (parcial) | admin, superadmin |
-| Eliminar | `DELETE /<id>` | admin, superadmin |
-| Subir/reemplazar video | `POST /<id>/video` · `DELETE /<id>/video` | admin, superadmin |
-| Catálogos (departamentos/grupos étnicos) | `GET /catalogos` | admin, superadmin (alimenta el formulario) |
+| Listar (tabla admin) | `GET /` | admin, superadmin, investigador |
+| Crear | `POST /` | admin, superadmin, investigador |
+| Editar | `PUT /<id>` (parcial) | admin, superadmin, investigador |
+| Eliminar | `DELETE /<id>` | admin, superadmin, investigador |
+| Subir/reemplazar video | `POST /<id>/video` · `DELETE /<id>/video` | admin, superadmin, investigador |
+| Catálogos (departamentos/grupos étnicos) | `GET /catalogos` | admin, superadmin, investigador (alimenta el formulario) |
 
 ---
 
@@ -53,7 +53,7 @@ Base URL: `https://back.alunaia.co/api/agrohub/agrohubs/` · Auth: `Authorizatio
 
 ### HU-G01 — Registrar un AgroHub
 
-**Como** administrador, **quiero** registrar un AgroHub con su número, familias, lugar,
+**Como** administrador o investigador, **quiero** registrar un AgroHub con su número, familias, lugar,
 asociaciones, grupo étnico, cultivos, coordenadas y video, **para** tener la ficha completa y verla
 en el geovisor.
 
@@ -140,7 +140,7 @@ Criterios de aceptación:
 
 ### HU-G04 — Editar y eliminar
 
-**Como** administrador, **quiero** corregir o retirar un AgroHub, **para** mantener el registro al
+**Como** administrador o investigador, **quiero** corregir o retirar un AgroHub, **para** mantener el registro al
 día.
 
 1. `PUT /agrohubs/<id>` es **parcial**: solo cambia lo que llegue.
@@ -152,7 +152,7 @@ día.
 
 ### HU-G05 — Video (material audiovisual)
 
-**Como** administrador, **quiero** adjuntar un video al AgroHub, **para** que quien vea el mapa
+**Como** administrador o investigador, **quiero** adjuntar un video al AgroHub, **para** que quien vea el mapa
 conozca el lugar y la iniciativa.
 
 1. Un video por AgroHub. Formatos: `mp4`, `webm`, `mov`.
@@ -181,7 +181,7 @@ conozca el lugar y la iniciativa.
 
 ## 4. Permisos y errores
 
-- Crear, editar, eliminar y subir video: **admin y superadmin**. Un `user` recibe `403`.
+- Crear, editar, eliminar y subir video: **admin, superadmin e investigador** (rol `investigador`, que se asigna con `PUT /user-activity/users/<id>/role`). Un `user` recibe `403`.
 - Ver puntos y detalle: **públicos, sin autenticación** (el geovisor es abierto). Por eso el detalle
   público no expone datos de gestión: se omiten `creado_por`/`editado_por` y fechas de auditoría
   (solo salen en el listado de admin `GET /agrohubs/`). Los GET públicos solo leen; cualquier

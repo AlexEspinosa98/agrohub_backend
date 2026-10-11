@@ -16,10 +16,11 @@ from apps.agrohubs.models import AgroHub
 from apps.agrohubs.serializers import AgroHubCreateSerializer, AgroHubUpdateSerializer
 from apps.asistencia_eventos.catalogos import COMUNIDADES_INDIGENAS_SUGERIDAS
 from apps.user_activity.authentication import TokenHeaderAuthentication
-from apps.user_activity.permissions import IsAdminRole, IsAuthenticatedWithRole
+from apps.user_activity.permissions import IsAdminOrInvestigadorRole, IsAuthenticatedWithRole
 
 _AUTH = [TokenHeaderAuthentication]
-_ADMIN_ONLY = [IsAuthenticatedWithRole, IsAdminRole]
+# Administran el registro: admin, superadmin e investigador.
+_ADMIN_ONLY = [IsAuthenticatedWithRole, IsAdminOrInvestigadorRole]
 # El geovisor es abierto: puntos y detalle no piden token.
 _PUBLICO = [AllowAny]
 

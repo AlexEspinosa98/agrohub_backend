@@ -24,6 +24,15 @@ class IsAdminRole(BasePermission):
         return getattr(request.user, "role", None) in ("admin", "superadmin")
 
 
+class IsAdminOrInvestigadorRole(BasePermission):
+    """Admin/superadmin o investigador: quienes administran el registro de AgroHubs."""
+
+    message = "Requiere rol admin o investigador"
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) in ("admin", "superadmin", "investigador")
+
+
 class IsSuperadminRole(BasePermission):
     message = "Requiere rol superadmin"
 
