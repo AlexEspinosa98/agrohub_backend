@@ -1,10 +1,24 @@
 # Historias de usuario — `apps.riego_iot` (gateways de riego / dashboard MQTT)
 
-**Última actualización:** 2026-09-16 · **Rol:** administrador de la plataforma AgroHub (panel
-interno, no la app de campo). Todos los endpoints requieren `Authorization: Token <token>` de
-una cuenta con rol `admin` o `superadmin` — mismo login que el resto de la app (`user_activity`),
-no una API key separada — ver `docs/API_RIEGO_IOT.md` para la referencia técnica completa con
-ejemplos reales.
+**Última actualización:** 2026-10-11 · **Quién:** equipo de la plataforma AgroHub (panel interno,
+no la app de campo). Todos los endpoints de administración requieren `Authorization: Token <token>`
+de una cuenta con rol **`admin`, `superadmin` o `investigador`** — mismo login que el resto de la app
+(`user_activity`), no una API key separada. Ver `docs/API_RIEGO_IOT.md` para la referencia técnica
+completa con ejemplos reales.
+
+## Quién ve qué
+
+| Qué | `admin` / `superadmin` / `investigador` | `user` (y sin rol) | Visitante sin cuenta |
+|---|---|---|---|
+| Gateways, dashboard, históricos (HU-05 a HU-11) | sí | **no** (`403`) | no (`401`) |
+| Alta, nombre, baja y contraseña de gateways (HU-01 a HU-04) | sí | no | no |
+| Configuración remota y órdenes de válvula (HU-12 a HU-14) | sí | no | no |
+| Historial de cambios (HU-15) | sí | no | no |
+| **Datos abiertos del lugar** (última temperatura, humedad y suelo) — HU-16 | sí | sí | **sí, sin token** |
+
+El módulo de riego es **solo del equipo**. Lo único que ve el público (y cualquier usuario) son los
+**datos ambientales abiertos** de cada AgroHub, a través del geovisor (`GET /agrohubs/<id>/datos`), que
+nunca expone válvulas, configuración, salud ni credenciales.
 
 ---
 
@@ -127,6 +141,53 @@ todas las noches"), algo que no se puede reconstruir solo con el estado "en lín
   — el frontend arma el gráfico de uptime a partir de la secuencia de eventos.
 - Antes de esta historia no existía ningún endpoint para esto — el dato solo se usaba
   internamente para calcular `en_linea` en HU-05/HU-06, sin exponerse como historial.
+
+---
+
+## Control desde la plataforma (octubre 2026)
+
+La plataforma **solo configura umbrales y manda órdenes manuales**; no publica el latido `cloud/health`,
+así que cada gateway sigue decidiendo el riego solo. Todo va por MQTT con el usuario `agrohub-plataforma`.
+
+### HU-12 — Ver la configuración vigente de un gateway
+Como integrante del equipo quiero ver los umbrales de riego y el modo automático de cada zona, para saber con qué
+reglas está regando hoy.
+- `GET /riego-iot/dispositivos/<device_id>/config/` → `config` con `rev`, `origen` (`defecto` | `sd` | `remoto`),
+  `aplicada_en` y, por zona, `auto` y `riego.RO1/RO2.{abrir, cerrar}`; `ultimo_rechazo` si el último cambio fue rechazado.
+- `config` es `null` si el gateway nunca publicó configuración. **Hoy solo `device0014` la publica**; los demás
+  necesitan el flow de Node-RED v3.
+- `503` si el broker MQTT no está disponible.
+
+### HU-13 — Cambiar umbrales y modo automático
+Como integrante del equipo quiero ajustar cuándo se abre y se cierra cada válvula, para adaptar el riego al cultivo.
+- `PUT /riego-iot/dispositivos/<device_id>/config/` con un cambio **parcial**:
+  `{"zonas": {"z1": {"riego": {"RO1": {"abrir": 28, "cerrar": 38}}}, "z3": {"auto": false}}}`.
+- El backend calcula `rev = vigente + 1`, valida (0 a 100, `cerrar − abrir ≥ 3`, zona y válvula existentes, `auto`
+  booleano) y espera hasta ~20 s la confirmación del gateway.
+- `data.resultado`: `aplicada` (200) · `rechazada` por el gateway (422, con `errores`) · `invalida` por validación previa (422)
+  · `sin_respuesta` (202: offline o `rev` vieja; **no darlo por aplicado**, volver a leer la configuración).
+- Si cambias un solo extremo de un rango, la histéresis se valida contra el valor vigente del otro.
+
+### HU-14 — Abrir o cerrar una válvula ahora
+Como integrante del equipo quiero mandar una orden manual a una válvula, para probar o regar en un momento concreto.
+- `POST /riego-iot/dispositivos/<device_id>/valvulas/` con `{"zona": "z1", "valvula": "RO1", "accion": "abrir"}`
+  (`accion`: `abrir` | `cerrar`).
+- Responde `202` con `resultado`: `enviada` (el gateway reconoció la orden) o `sin_eco` (enviada, posiblemente offline);
+  `422` si la orden es inválida.
+- La orden activa un **override manual de 30 min** en esa válvula. La confirmación física tarda hasta ~10 min y se ve en
+  `GET /riego-iot/dashboard/<device_id>/lecturas/valvulas/` (`origen: "reportado"`).
+- Una orden por controlador a la vez y esperar su confirmación antes de la siguiente. Ver la guía de pruebas de N14.
+
+### HU-15 — Historial de cambios
+Como integrante del equipo quiero saber quién cambió qué y con qué resultado, para hacer seguimiento.
+- `GET /riego-iot/dispositivos/<device_id>/cambios/?limite=100` → `tipo` (`config` | `valvula`), `rev`, `resultado`, `errores`,
+  `payload`, `creado_en`, `usuario` y `usuario_id`. Quedan registrados también los intentos inválidos.
+
+### HU-16 — Datos abiertos del lugar (lo que ve el público)
+Como visitante del geovisor quiero ver la temperatura y humedad actuales de un AgroHub, para conocer las condiciones del lugar.
+- Cada AgroHub se asocia a su gateway desde el admin (campo `dispositivo` de la ficha; ver `HU_AGROHUBS_GEOVISOR.md`, HU-G07).
+- `GET /agrohubs/<id>/datos` (**sin token**) → `ultima_lectura`, `en_linea`, `ambiente {temperatura, humedad}` y
+  `suelo {humedad_suelo, temperatura_suelo, conductividad}`. `404` si el AgroHub no tiene dispositivo.
 
 ---
 
