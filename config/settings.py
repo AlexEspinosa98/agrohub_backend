@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     "apps.agrohubs",
     "apps.riego_cambios",
     "apps.cartillas",
+    "apps.blogs",
     "apps.riego_iot",
 ]
 
