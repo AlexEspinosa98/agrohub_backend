@@ -22,6 +22,7 @@ urlpatterns = [
     path("encuesta-nutricional/", include("apps.encuesta_nutricional.urls")),
     path("asistencia-eventos/", include("apps.asistencia_eventos.urls")),
     path("agrohubs/", include("apps.agrohubs.urls")),
+    path("cartillas/", include("apps.cartillas.urls")),
     path("riego-iot/", include("apps.riego_iot.urls")),
     path("schema/", SpectacularAPIView.as_view(), name="schema"),
     path("docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

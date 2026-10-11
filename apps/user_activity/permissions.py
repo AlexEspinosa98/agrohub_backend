@@ -33,6 +33,15 @@ class IsAdminOrInvestigadorRole(BasePermission):
         return getattr(request.user, "role", None) in ("admin", "superadmin", "investigador")
 
 
+class IsContenidoEditorRole(BasePermission):
+    """Quienes suben y administran contenido (cartillas): admin, superadmin, investigador y comunicaciones."""
+
+    message = "Requiere rol admin, investigador o comunicaciones"
+
+    def has_permission(self, request, view):
+        return getattr(request.user, "role", None) in ("admin", "superadmin", "investigador", "comunicaciones")
+
+
 class IsSuperadminRole(BasePermission):
     message = "Requiere rol superadmin"
 

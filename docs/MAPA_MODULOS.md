@@ -6,7 +6,7 @@ rutas reales del código y los conteos de la base de producción (11 oct 2026).
 Base: Django + DRF · MySQL `agrohub_v2` (+ Postgres `agrohub_mqtt` solo para riego) · `/api/agrohub/`.
 Auth: `Authorization: Token <token>` (tabla `Session`). Roles hoy: `user`, `admin`, `superadmin`.
 
-## 1. Resumen: 7 módulos
+## 1. Resumen: 8 módulos
 
 | # | Módulo (app) | Qué hace | Datos en producción | Acceso hoy |
 |---|---|---|---|---|
@@ -17,6 +17,7 @@ Auth: `Authorization: Token <token>` (tabla `Session`). Roles hoy: `user`, `admi
 | 5 | `asistencia_eventos` | digitalizar hojas de asistencia con OCR, eventos, dashboard | 208 personas · 18 eventos · 235 asistencias · 32 escaneos | cualquier rol con sesión |
 | 6 | `agrohubs` | fichas de AgroHubs para el geovisor (coordenadas, familias, video) | 0 | lectura **pública**, escritura admin |
 | 7 | `riego_iot` | gateways de riego y lecturas (lee la BD de `mqtt_agrohub`) | 16 dispositivos · ~4.8 mil lecturas de suelo y ambiente | admin, superadmin e investigador |
+| 8 | `cartillas` | biblioteca pública de cartillas en PDF con índice y búsqueda (ver `HU_CARTILLAS.md`) | 0 al crearse | lectura **pública**; escritura admin, superadmin, investigador y comunicaciones |
 
 Servicios de apoyo en el servidor: `agrohub-ocr-llm` (modelo de visión local para el OCR de
 asistencia). Otros sistemas fuera de este backend: `mqtt_agrohub` (ingesta MQTT/IoT) y el AgroHub
