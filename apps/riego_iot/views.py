@@ -18,9 +18,17 @@ from apps.riego_iot.models import (
     Dispositivo, EstadoConexion, EstadoValvula, Healthcheck, LecturaAmbiente, LecturaSuelo,
 )
 from apps.riego_iot.mosquitto_admin import MosquittoAdminError, crear_credencial, eliminar_credencial, rotar_password
-from apps.riego_iot.serializers import DispositivoCrearSerializer, DispositivoEditarSerializer, DispositivoSerializer
+from apps.riego_cambios.models import CambioRiego
+from apps.riego_iot import control_mqtt
+from apps.riego_iot.serializers import (
+    ComandoValvulaSerializer,
+    ConfigCambioSerializer,
+    DispositivoCrearSerializer,
+    DispositivoEditarSerializer,
+    DispositivoSerializer,
+)
 from apps.user_activity.authentication import TokenHeaderAuthentication
-from apps.user_activity.permissions import IsAdminRole, IsAuthenticatedWithRole
+from apps.user_activity.permissions import IsAdminOrInvestigadorRole, IsAuthenticatedWithRole
 
 # Ventana usada para decidir "conectado ahora" cuando no hay un status/LWT reciente que lo diga
 # explícitamente — coincide con la ventana de 3 minutos del manual UG56 (sección 08) para el
@@ -38,7 +46,8 @@ VENTANA_CONEXION = timedelta(minutes=3)
 # TokenHeaderAuthenticationScheme en user_activity/authentication.py) — ya no hace falta
 # declarar un security scheme a mano como con el X-API-Key.
 _AUTH = [TokenHeaderAuthentication]
-_ADMIN_ONLY = [IsAuthenticatedWithRole, IsAdminRole]
+# Ver y administrar los dispositivos: admin, superadmin e investigador.
+_ADMIN_ONLY = [IsAuthenticatedWithRole, IsAdminOrInvestigadorRole]
 
 _LECTURA_QUERY_PARAMS = [
     OpenApiParameter("desde", str, OpenApiParameter.QUERY, description="ISO 8601. Default: hasta - 7 días."),
@@ -507,3 +516,117 @@ def lecturas_conexion_dispositivo(request, device_id):
         .order_by("-recibido_en")[:limite]
     )
     return Response([{"recibido_en": r.recibido_en, "estado": r.estado} for r in qs])
+
+
+# ---------------------------------------------------------------------------
+# Configuración remota y órdenes de válvula (por MQTT) — ver apps/riego_iot/control_mqtt.py.
+# La plataforma solo configura umbrales y manda órdenes manuales; no publica cloud/health.
+# ---------------------------------------------------------------------------
+
+def _registrar_cambio(request, device_id, tipo, payload, resultado, rev=None, errores=None):
+    CambioRiego.objects.create(
+        device_id=device_id, tipo=tipo, usuario=request.user, rev=rev,
+        payload=payload, resultado=resultado, errores=errores or [],
+    )
+
+
+@extend_schema(
+    methods=["GET"], tags=["riego-iot"],
+    summary="Configuración vigente del gateway (umbrales y modo automático por zona)",
+    description="Lee el `config/state` retenido del gateway. `config` es null si nunca publicó uno.",
+)
+@extend_schema(
+    methods=["PUT"], tags=["riego-iot"],
+    summary="Cambiar umbrales / modo automático de un gateway (cambio parcial)",
+    description=(
+        "Envía `config/set` con `rev = vigente + 1` y espera hasta ~20 s la confirmación. "
+        "`resultado`: `aplicada` (200), `rechazada` por el gateway (422, con `errores`), "
+        "`invalida` por validación previa (422) o `sin_respuesta` (202: pendiente/offline; "
+        "no darlo por aplicado, releer GET .../config/)."
+    ),
+    request=ConfigCambioSerializer,
+    examples=[OpenApiExample("Bajar el umbral de z1.RO1", value={
+        "zonas": {"z1": {"riego": {"RO1": {"abrir": 28, "cerrar": 38}}}, "z3": {"auto": False}},
+    }, request_only=True)],
+)
+@api_view(["GET", "PUT"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def dispositivo_config(request, device_id):
+    _obtener_dispositivo_o_404(device_id)
+    if request.method == "GET":
+        try:
+            config = control_mqtt.leer_config(device_id)
+        except control_mqtt.MqttNoDisponible as exc:
+            return Response({"detail": str(exc)}, status=503)
+        return Response({"status": 200, "message": "config", "data": {"device_id": device_id, "config": config}})
+
+    serializer = ConfigCambioSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    zonas = serializer.validated_data["zonas"]
+    try:
+        r = control_mqtt.aplicar_config(device_id, zonas)
+    except control_mqtt.MqttNoDisponible as exc:
+        return Response({"detail": str(exc)}, status=503)
+    _registrar_cambio(request, device_id, CambioRiego.TIPO_CONFIG, {"zonas": zonas}, r["resultado"], r.get("rev"), r["errores"])
+    codigo = {"aplicada": 200, "sin_respuesta": 202}.get(r["resultado"], 422)
+    mensajes = {
+        "aplicada": "Configuración aplicada",
+        "rechazada": "El gateway rechazó la configuración",
+        "invalida": "La configuración no es válida",
+        "sin_respuesta": "Sin respuesta del gateway (offline o rev vieja): queda pendiente, verifica con GET .../config/",
+    }
+    return Response({"status": codigo, "message": mensajes[r["resultado"]], "data": {"device_id": device_id, **r}}, status=codigo)
+
+
+@extend_schema(
+    tags=["riego-iot"],
+    summary="Abrir o cerrar una válvula ahora (override manual de 30 min en el gateway)",
+    description=(
+        "Publica `control/valvulas` y espera ~5 s el eco `origen: remoto`. La confirmación física "
+        "(`origen: reportado`) puede tardar hasta ~10 min: se ve en `GET dashboard/<id>/lecturas/valvulas/`. "
+        "Manda UNA orden por controlador y espera su confirmación antes de la siguiente."
+    ),
+    request=ComandoValvulaSerializer,
+    examples=[OpenApiExample("Abrir válvula 1 de N14", value={"zona": "z1", "valvula": "RO1", "accion": "abrir"}, request_only=True)],
+)
+@api_view(["POST"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def dispositivo_valvulas(request, device_id):
+    _obtener_dispositivo_o_404(device_id)
+    serializer = ComandoValvulaSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    d = serializer.validated_data
+    try:
+        r = control_mqtt.enviar_comando_valvula(device_id, d["zona"], d["valvula"], d["accion"])
+    except control_mqtt.MqttNoDisponible as exc:
+        return Response({"detail": str(exc)}, status=503)
+    _registrar_cambio(request, device_id, CambioRiego.TIPO_VALVULA, r["comando"], r["resultado"], errores=r["errores"])
+    if r["resultado"] == "invalida":
+        return Response({"status": 422, "message": "Orden inválida", "data": {"device_id": device_id, **r}}, status=422)
+    mensaje = "Orden enviada y reconocida por el gateway" if r["resultado"] == "enviada" else \
+        "Orden enviada, sin eco del gateway todavía (puede estar offline)"
+    return Response({"status": 202, "message": mensaje, "data": {"device_id": device_id, **r}}, status=202)
+
+
+@extend_schema(tags=["riego-iot"], summary="Historial de cambios de configuración y órdenes de válvula")
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def dispositivo_cambios(request, device_id):
+    _obtener_dispositivo_o_404(device_id)
+    try:
+        limite = min(max(int(request.query_params.get("limite", 100)), 1), 500)
+    except ValueError:
+        raise ValidationError("limite debe ser un entero")
+    cambios = CambioRiego.objects.filter(device_id=device_id).select_related("usuario")[:limite]
+    data = [
+        {
+            "id": c.id, "tipo": c.tipo, "rev": c.rev, "resultado": c.resultado, "errores": c.errores,
+            "payload": c.payload, "creado_en": c.creado_en,
+            "usuario": getattr(c.usuario, "name", None), "usuario_id": c.usuario_id,
+        }
+        for c in cambios
+    ]
+    return Response({"status": 200, "message": "cambios", "data": data})

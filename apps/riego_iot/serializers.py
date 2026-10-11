@@ -42,3 +42,16 @@ class DispositivoEditarSerializer(serializers.Serializer):
     rotar-password/), no un simple update de fila."""
 
     nombre = serializers.CharField(allow_null=True, allow_blank=True)
+
+
+class ConfigCambioSerializer(serializers.Serializer):
+    """PUT /dispositivos/<id>/config/ — cambio PARCIAL: solo lo que venga se modifica. La
+    validación fina (0-100, histéresis >= 3, zonas existentes) la hace control_mqtt.validar_config."""
+
+    zonas = serializers.DictField(child=serializers.DictField())
+
+
+class ComandoValvulaSerializer(serializers.Serializer):
+    zona = serializers.CharField()
+    valvula = serializers.CharField()
+    accion = serializers.CharField()

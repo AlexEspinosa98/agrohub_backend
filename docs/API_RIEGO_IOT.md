@@ -24,7 +24,7 @@ Authorization: Token <token de sesión>
 ```
 
 El token se obtiene con `POST /user-activity/users/login`, igual que cualquier otro módulo, y la
-cuenta debe tener rol `admin` o `superadmin` (asignado vía `PUT /user-activity/users/<id>/role`
+cuenta debe tener rol `admin`, `superadmin` o `investigador` (asignado vía `PUT /user-activity/users/<id>/role`
 por un superadmin — ver `docs/roles-api.md`).
 
 Sin el header, `401`:
@@ -37,9 +37,9 @@ Con token válido pero sin rol asignado, `403`:
 {"detail": "Tu cuenta aún no tiene un rol asignado. Contacta a un superadmin."}
 ```
 
-Con rol `user` (ni admin ni superadmin), `403`:
+Con rol `user` (ni admin, superadmin ni investigador), `403`:
 ```json
-{"detail": "Requiere rol admin"}
+{"detail": "Requiere rol admin o investigador"}
 ```
 
 > **Por qué no una API key fija:** hasta 2026-09-16 estos endpoints usaban un `X-API-Key`
@@ -468,3 +468,64 @@ Response `200`:
   "¿tiene contraseña asignada?", usar el campo `client_id` de `/dispositivos/` (no nulo = tiene
   credencial activa).
 - Todos los timestamps son UTC (`Z`).
+
+
+---
+
+## Configuración remota y órdenes de válvula (2026-10)
+
+Roles: `admin`, `superadmin` e `investigador` (los tres pueden leer, configurar y mandar órdenes).
+Por ahora la plataforma **solo configura umbrales y manda órdenes manuales**: no publica el latido
+`cloud/health`, así que el gateway sigue decidiendo el riego solo. Detalle del protocolo MQTT:
+`CONFIGURACION_REMOTA.md` del flow v3 y la guía de pruebas de válvulas N14.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| `GET` | `/dispositivos/{device_id}/config/` | Configuración vigente (`config/state` retenido): `rev`, `origen`, umbrales por zona. `config` es `null` si nunca publicó |
+| `PUT` | `/dispositivos/{device_id}/config/` | Cambio **parcial** de umbrales / `auto`. El backend calcula `rev = vigente + 1`, valida y espera hasta ~20 s la confirmación |
+| `POST` | `/dispositivos/{device_id}/valvulas/` | Abrir/cerrar una válvula ahora (override manual de 30 min en el gateway) |
+| `GET` | `/dispositivos/{device_id}/cambios/` | Historial: quién, cuándo, qué se envió y cómo terminó (`?limite=`, máx. 500) |
+
+### `PUT /dispositivos/{id}/config/`
+
+```json
+{ "zonas": { "z1": { "riego": { "RO1": { "abrir": 28, "cerrar": 38 } } }, "z3": { "auto": false } } }
+```
+
+Solo se modifica lo que venga. Validación (igual a la del gateway, todo o nada): números entre 0 y
+100, `cerrar − abrir ≥ 3` (usando el valor vigente si solo mandas un extremo), válvulas `RO1`/`RO2`,
+`auto` booleano, zona existente. `data.resultado`:
+
+| `resultado` | HTTP | Significado |
+|---|---|---|
+| `aplicada` | 200 | El gateway confirmó con la nueva `rev`; `data.config` es la configuración completa vigente |
+| `rechazada` | 422 | El gateway la rechazó; `data.errores` explica por qué |
+| `invalida` | 422 | No se envió: falló la validación previa (`data.errores`) |
+| `sin_respuesta` | 202 | Sin confirmación en ~20 s (gateway offline o `rev` vieja). **No darla por aplicada**: verificar con `GET .../config/` |
+
+### `POST /dispositivos/{id}/valvulas/`
+
+```json
+{ "zona": "z1", "valvula": "RO1", "accion": "abrir" }
+```
+
+`accion`: `abrir` | `cerrar`. Responde `202` con `resultado`: `enviada` (el gateway reconoció la orden,
+`origen: "remoto"`) o `sin_eco` (enviada pero sin eco: posiblemente offline). **La confirmación
+física tarda hasta ~10 min** y se ve en `GET dashboard/{id}/lecturas/valvulas/` (`origen: "reportado"`).
+Manda una orden por controlador y espera su confirmación antes de la siguiente.
+
+### Errores
+
+`503` si el broker MQTT no está disponible o rechaza las credenciales de la plataforma. `403` si
+el rol no es admin, superadmin ni investigador. Cada intento (también los inválidos) queda en
+`/cambios/`.
+
+### Puesta en marcha en el servidor (una vez)
+
+1. `sudo ./scripts/crear_usuario_mqtt_plataforma.sh` crea el usuario `agrohub-plataforma` con un ACL
+   mínimo (lee `config/state`, `valvulas/state`, `health`, `status`; escribe `config/set` y
+   `control/valvulas`) y muestra su contraseña.
+2. Agregar `RIEGO_IOT_MQTT_USER` y `RIEGO_IOT_MQTT_PASSWORD` al `.env` del backend
+   (`RIEGO_IOT_MQTT_HOST`/`PORT` por defecto apuntan al listener local `127.0.0.1:1883`).
+3. `pip install -r requirements.txt` (agrega `paho-mqtt`), `python manage.py migrate` y reiniciar
+   `agrohub-backend`.

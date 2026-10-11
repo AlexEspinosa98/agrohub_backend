@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "apps.encuesta_nutricional",
     "apps.asistencia_eventos",
     "apps.agrohubs",
+    "apps.riego_cambios",
     "apps.riego_iot",
 ]
 
@@ -191,6 +192,15 @@ WHISPER_MODEL_NAME = os.getenv("WHISPER_MODEL", "tiny")
 # que corre en el navegador.
 RIEGO_IOT_MOSQUITTO_PASSWD_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_PASSWD_FILE", "/etc/mosquitto/passwd")
 RIEGO_IOT_MOSQUITTO_ACL_FILE = os.getenv("RIEGO_IOT_MOSQUITTO_ACL_FILE", "/etc/mosquitto/acl.conf")
+
+# Usuario MQTT de la plataforma (config remota y órdenes de válvula). Se conecta al listener local
+# del broker (127.0.0.1:1883, sin TLS); si apuntas al 8883 público, activa RIEGO_IOT_MQTT_TLS.
+# Se crea con scripts/crear_usuario_mqtt_plataforma.sh.
+RIEGO_IOT_MQTT_HOST = os.getenv("RIEGO_IOT_MQTT_HOST", "127.0.0.1")
+RIEGO_IOT_MQTT_PORT = int(os.getenv("RIEGO_IOT_MQTT_PORT", "1883"))
+RIEGO_IOT_MQTT_TLS = os.getenv("RIEGO_IOT_MQTT_TLS", "false").lower() == "true"
+RIEGO_IOT_MQTT_USER = os.getenv("RIEGO_IOT_MQTT_USER", "")
+RIEGO_IOT_MQTT_PASSWORD = os.getenv("RIEGO_IOT_MQTT_PASSWORD", "")
 
 # ---------------------------------------------------------------------------
 # apps.asistencia_eventos — motor de OCR para el escaneo de listas de asistencia.
