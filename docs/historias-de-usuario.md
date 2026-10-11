@@ -354,5 +354,5 @@ Como administrador, quiero ver qué usuario cargó cada hoja de asistencia y qui
 **HU-T01 — Errores de validación consistentes**
 Como integrador de un frontend, quiero que cualquier error de validación (en cualquier módulo) me devuelva la misma forma `{"status":422,"message","total_errores","errores":[...]}` con el campo, el mensaje, el tipo de error y el valor recibido, para poder armar un manejo de errores genérico.
 
-**HU-T02 — Bloqueo por rol antes de asignación**
-Como sistema, quiero que ningún usuario recién registrado pueda usar un endpoint protegido hasta que un superadmin le asigne un rol explícitamente, para que el acceso siempre sea una decisión humana y no un descuido de configuración.
+**HU-T02 — Rol `user` por defecto al registrarse**
+Como sistema, quiero que todo usuario recién registrado nazca con el rol `user` (el de menor privilegio), para que pueda usar de inmediato lo que le corresponde a ese rol sin esperar a que alguien se lo asigne, y que solo un superadmin pueda subirlo a `admin`/`superadmin` (PUT /user-activity/users/{id}/role). *(Reemplaza la versión anterior, en la que el usuario quedaba sin rol y recibía 403 hasta que un superadmin lo asignaba.)*

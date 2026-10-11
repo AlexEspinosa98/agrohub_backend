@@ -311,8 +311,8 @@ class AssociationDetailView(APIView):
 
 @extend_schema(
     tags=[TAG],
-    summary="Auto-registro de usuario (público, sin rol asignado)",
-    description="El usuario queda sin `role` (null) hasta que un superadmin se lo asigne (ver PUT /users/{id}/role).",
+    summary="Auto-registro de usuario (público; nace con rol `user`)",
+    description="El usuario nace con `role=\"user\"`. Un superadmin puede cambiarlo después (ver PUT /users/{id}/role).",
     request=UserRegisterSerializer,
     responses={
         201: OpenApiResponse(response=_envelope(name="UserRegistered")),
@@ -335,7 +335,7 @@ def register_user(request):
             email=data.get("email"),
             password_hash=hash_password(data["password"]),
             association_id=data.get("association_id"),
-            role=None,
+            role="user",
         )
     except IntegrityError as exc:
         raise ParseError("Teléfono o identificación ya registrados") from exc
