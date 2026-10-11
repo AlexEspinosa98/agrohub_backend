@@ -47,6 +47,7 @@ class AgroHubCreateSerializer(serializers.Serializer):
     grupo_etnico = serializers.ChoiceField(choices=GRUPOS_ETNICOS, required=False, allow_null=True)
     comunidad = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
     cultivos = _lista_texto(required=False)
+    dispositivo = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=64)
     latitud = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=Decimal("-90"), max_value=Decimal("90"))
     longitud = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=Decimal("-180"), max_value=Decimal("180"))
 
@@ -67,6 +68,7 @@ class AgroHubUpdateSerializer(serializers.Serializer):
     grupo_etnico = serializers.ChoiceField(choices=GRUPOS_ETNICOS, required=False, allow_null=True)
     comunidad = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
     cultivos = _lista_texto(required=False)
+    dispositivo = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=64)
     latitud = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=Decimal("-90"), max_value=Decimal("90"), required=False)
     longitud = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=Decimal("-180"), max_value=Decimal("180"), required=False)
 

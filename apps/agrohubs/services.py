@@ -11,7 +11,7 @@ from apps.asistencia_eventos.catalogos import normalizar_comunidad
 
 _CAMPOS_ESCRIBIBLES = (
     "numero", "familias", "departamento", "municipio", "es_cabecera_municipal", "vereda",
-    "asociaciones", "grupo_etnico", "comunidad", "cultivos", "latitud", "longitud",
+    "asociaciones", "grupo_etnico", "comunidad", "cultivos", "latitud", "longitud", "dispositivo",
 )
 
 
@@ -23,6 +23,8 @@ def _limpiar(data: dict) -> dict:
         data["vereda"] = (data["vereda"] or "").strip() or None
     if "comunidad" in data:
         data["comunidad"] = normalizar_comunidad(data["comunidad"])
+    if "dispositivo" in data:
+        data["dispositivo"] = (data["dispositivo"] or "").strip() or None
     if data.get("grupo_etnico") == "":
         data["grupo_etnico"] = None
     for campo in ("familias", "asociaciones", "cultivos"):
@@ -114,3 +116,48 @@ def valores_usados(campo: str) -> list:
         for item in lista or []:
             vistos.setdefault(item.lower(), item)
     return sorted(vistos.values(), key=str.lower)
+
+
+# --- Dispositivo IoT asociado (los datos viven en la base de mqtt_agrohub, vía apps.riego_iot) ---
+
+def dispositivo_activo(device_id):
+    """Dispositivo (activo) de riego_iot con ese device_id, o None."""
+    from apps.riego_iot.models import Dispositivo
+
+    return Dispositivo.objects.filter(device_id=device_id, activo=True).first()
+
+
+def dispositivos_disponibles():
+    """Gateways activos que todavía no están asociados a ningún AgroHub."""
+    from apps.riego_iot.models import Dispositivo
+
+    usados = set(AgroHub.objects.exclude(dispositivo__isnull=True).values_list("dispositivo", flat=True))
+    return [d for d in Dispositivo.objects.filter(activo=True).order_by("device_id") if d.device_id not in usados]
+
+
+def nombres_dispositivos(device_ids):
+    from apps.riego_iot.models import Dispositivo
+
+    return dict(Dispositivo.objects.filter(device_id__in=device_ids).values_list("device_id", "nombre"))
+
+
+def lecturas_publicas(device_id):
+    """Última lectura de ambiente y de suelo del gateway — solo datos ambientales (nada de
+    válvulas, salud ni credenciales), pensado para el endpoint público."""
+    from datetime import datetime, timedelta, timezone
+
+    from apps.riego_iot.models import LecturaAmbiente, LecturaSuelo
+
+    ambiente = LecturaAmbiente.objects.filter(device_id=device_id).order_by("-medido_en").first()
+    suelo = LecturaSuelo.objects.filter(device_id=device_id).order_by("-medido_en").first()
+    ultima = max((f.medido_en for f in (ambiente, suelo) if f), default=None)
+    return {
+        "ultima_lectura": ultima,
+        # Mismo criterio que riego_iot: sin datos nuevos en 3 minutos se considera sin conexión.
+        "en_linea": bool(ultima and datetime.now(timezone.utc) - ultima <= timedelta(minutes=3)),
+        "ambiente": {"medido_en": ambiente.medido_en, "temperatura": ambiente.temperatura, "humedad": ambiente.humedad} if ambiente else None,
+        "suelo": {
+            "medido_en": suelo.medido_en, "humedad_suelo": suelo.humedad_suelo,
+            "temperatura_suelo": suelo.temperatura_suelo, "conductividad": suelo.conductividad,
+        } if suelo else None,
+    }

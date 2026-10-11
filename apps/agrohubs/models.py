@@ -19,6 +19,9 @@ class AgroHub(models.Model):
     cultivos = models.JSONField(default=list)
     latitud = models.DecimalField(max_digits=9, decimal_places=6)
     longitud = models.DecimalField(max_digits=9, decimal_places=6)
+    # Gateway IoT asociado (device_id de apps.riego_iot.Dispositivo, p. ej. "device0014"). Es otra
+    # base de datos, así que no hay FK: se valida al guardar. Un dispositivo, un solo AgroHub.
+    dispositivo = models.CharField(max_length=64, null=True, blank=True, unique=True)
     # Ruta relativa en el storage de media; un solo video por AgroHub.
     video = models.TextField(null=True, blank=True)
     creado_por = models.ForeignKey(

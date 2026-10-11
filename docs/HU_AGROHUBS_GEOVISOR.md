@@ -24,6 +24,7 @@ Base URL: `https://back.alunaia.co/api/agrohub/agrohubs/` · Auth: `Authorizatio
 | `grupo_etnico` | opción | **no** | `indigena`, `afro`, `rom`, `raizal`, `ninguno`; vacío = no aplica |
 | `comunidad` | texto (máx. 100) | **solo si** `grupo_etnico = indigena` | mismo catálogo y reglas que en asistencia (`GET /asistencia-eventos/comunidades`, "Otra" con texto libre); con otro grupo étnico se rechaza |
 | `video` | archivo | no | material audiovisual (ver HU-G05) |
+| `dispositivo` | texto (`device_id`) | **no** | gateway IoT asociado (ej. `device0014`); debe existir y estar activo en `riego_iot`, y **un dispositivo solo puede estar en un AgroHub** (ver HU-G07) |
 | `creado_por`, `editado_por`, fechas | auditoría | automático | igual que en asistencia |
 
 **Listas (relaciones, 1 AgroHub → N)**
@@ -45,6 +46,8 @@ Base URL: `https://back.alunaia.co/api/agrohub/agrohubs/` · Auth: `Authorizatio
 | Editar | `PUT /<id>` (parcial) | admin, superadmin, investigador |
 | Eliminar | `DELETE /<id>` | admin, superadmin, investigador |
 | Subir/reemplazar video | `POST /<id>/video` · `DELETE /<id>/video` | admin, superadmin, investigador |
+| Dispositivos IoT sin asociar | `GET /dispositivos-disponibles` | admin, superadmin, investigador |
+| Datos abiertos del lugar | `GET /<id>/datos` | **público** (sin token) |
 | Catálogos (departamentos/grupos étnicos) | `GET /catalogos` | admin, superadmin, investigador (alimenta el formulario) |
 
 ---
@@ -176,6 +179,39 @@ conozca el lugar y la iniciativa.
 3. `asociaciones` y `cultivos` son **texto libre**; como ayuda, `catalogos.asociaciones` y
    `catalogos.cultivos` devuelven los ya usados para autocompletar (no obliga a escoger de ahí).
 4. `catalogos.comunidades` devuelve las opciones de comunidad indígena.
+
+---
+
+### HU-G07 — Asociar un AgroHub a su dispositivo IoT y publicar sus datos
+
+**Como** administrador o investigador, **quiero** indicar qué gateway de riego pertenece a cada
+AgroHub, **para** que el geovisor muestre los datos ambientales de ese lugar y cualquiera pueda
+consultarlos como datos abiertos.
+
+Criterios de aceptación:
+
+1. En el formulario del AgroHub hay un selector **Dispositivo IoT** (opcional). Sus opciones salen de
+   `GET /agrohubs/dispositivos-disponibles` (`[{device_id, nombre}]`: gateways activos que aún no
+   tienen AgroHub). El valor se envía como `dispositivo` en `POST /agrohubs/` o `PUT /agrohubs/<id>`.
+2. Reglas: el dispositivo debe existir y estar activo (si no, `422` en `dispositivo`); un dispositivo
+   solo puede estar en un AgroHub (`422` si ya está asociado a otro); `null` o vacío lo desasocia.
+   Al editar, el propio AgroHub puede conservar el que ya tiene.
+3. `GET /agrohubs/puntos` trae `tiene_dispositivo` (booleano) para que el mapa distinga los
+   AgroHubs con sensores.
+4. `GET /agrohubs/<id>` trae `dispositivo: {device_id, nombre}` o `null`.
+5. **Datos abiertos:** `GET /agrohubs/<id>/datos` (sin token) devuelve la última lectura ambiental y
+   de suelo del gateway asociado; `404` si el AgroHub no tiene dispositivo. Solo expone datos
+   ambientales: **nunca** válvulas, configuración, salud ni credenciales del gateway.
+
+```json
+{ "status": 200, "message": "datos",
+  "data": { "agrohub_id": 3, "numero": "AH-014", "ultima_lectura": "2026-10-11T21:17:54Z", "en_linea": true,
+            "ambiente": { "medido_en": "...", "temperatura": 29.1, "humedad": 70.0 },
+            "suelo": { "medido_en": "...", "humedad_suelo": 41.2, "temperatura_suelo": 27.5, "conductividad": 310 } } }
+```
+
+`en_linea` es `true` si hubo una lectura en los últimos 3 minutos. La relación es entre bases de datos
+distintas (MySQL y la de `mqtt_agrohub`), por eso se valida al guardar y no con una llave foránea.
 
 ---
 

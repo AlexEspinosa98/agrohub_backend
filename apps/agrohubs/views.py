@@ -33,6 +33,16 @@ def _url_video(agrohub):
     return default_storage.url(agrohub.video) if agrohub.video else None
 
 
+def _dispositivo(a: AgroHub):
+    if not a.dispositivo:
+        return None
+    try:
+        nombre = services.nombres_dispositivos([a.dispositivo]).get(a.dispositivo)
+    except Exception:  # noqa: BLE001 — si la base de IoT no responde, la ficha igual se entrega
+        nombre = None
+    return {"device_id": a.dispositivo, "nombre": nombre}
+
+
 def _detalle(a: AgroHub, admin=False) -> dict:
     data = {
         "id": a.id,
@@ -50,6 +60,7 @@ def _detalle(a: AgroHub, admin=False) -> dict:
         "cultivos": a.cultivos,
         "coordenadas": {"latitud": float(a.latitud), "longitud": float(a.longitud)},
         "video": _url_video(a),
+        "dispositivo": _dispositivo(a),
     }
     if admin:
         data.update(
@@ -73,6 +84,21 @@ def _ok(message, data, code=status.HTTP_200_OK):
     return Response({"status": code, "message": message, "data": data}, status=code)
 
 
+def _validar_dispositivo(device_id, excluir_id=None):
+    """El gateway debe existir (activo) y no estar asociado a otro AgroHub."""
+    if not device_id:
+        return
+    device_id = device_id.strip()
+    if not services.dispositivo_activo(device_id):
+        raise ValidationError({"dispositivo": f"No existe un dispositivo activo con id '{device_id}'."})
+    ocupado = AgroHub.objects.filter(dispositivo=device_id)
+    if excluir_id:
+        ocupado = ocupado.exclude(id=excluir_id)
+    otro = ocupado.first()
+    if otro:
+        raise ValidationError({"dispositivo": f"El dispositivo '{device_id}' ya está asociado al AgroHub '{otro.numero}'."})
+
+
 def _validar_numero_unico(numero, excluir_id=None):
     if numero and services.numero_en_uso(numero, excluir_id):
         raise ValidationError({"numero": f"Ya existe un AgroHub con el número '{numero}'."})
@@ -90,6 +116,7 @@ def puntos(request):
             "longitud": float(a.longitud),
             "municipio": a.municipio,
             "departamento": a.departamento,
+            "tiene_dispositivo": bool(a.dispositivo),
         }
         for a in services.filtrar_puntos(request.query_params)
     ]
@@ -141,6 +168,7 @@ def _crear(request):
     serializer = AgroHubCreateSerializer(data=payload)
     serializer.is_valid(raise_exception=True)
     _validar_numero_unico(serializer.validated_data["numero"])
+    _validar_dispositivo(serializer.validated_data.get("dispositivo"))
     agrohub = services.crear(
         serializer.validated_data, creado_por=request.user, video=request.FILES.get("video")
     )
@@ -161,6 +189,7 @@ def _actualizar(request, agrohub_id):
     serializer = AgroHubUpdateSerializer(data=request.data, context={"agrohub": agrohub})
     serializer.is_valid(raise_exception=True)
     _validar_numero_unico(serializer.validated_data.get("numero"), excluir_id=agrohub.id)
+    _validar_dispositivo(serializer.validated_data.get("dispositivo"), excluir_id=agrohub.id)
     agrohub = services.actualizar(agrohub, serializer.validated_data, editado_por=request.user)
     return _ok("agrohub actualizado", _detalle(agrohub, admin=True))
 
@@ -191,6 +220,27 @@ class AgroHubDetailView(APIView):
 
 
 agrohub_detail = AgroHubDetailView.as_view()
+
+
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes(_PUBLICO)
+def agrohub_datos(request, agrohub_id: int):
+    """Datos abiertos del lugar: última lectura ambiental y de suelo del gateway asociado."""
+    agrohub = _obtener(agrohub_id)
+    if not agrohub.dispositivo:
+        raise NotFound("Este AgroHub no tiene un dispositivo IoT asociado")
+    data = {"agrohub_id": agrohub.id, "numero": agrohub.numero, **services.lecturas_publicas(agrohub.dispositivo)}
+    return _ok("datos", data)
+
+
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def dispositivos_disponibles(request):
+    """Gateways activos sin AgroHub asociado: alimenta el selector del formulario del admin."""
+    data = [{"device_id": d.device_id, "nombre": d.nombre} for d in services.dispositivos_disponibles()]
+    return _ok("dispositivos disponibles", data)
 
 
 @api_view(["POST", "DELETE"])
