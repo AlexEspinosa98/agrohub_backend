@@ -16,7 +16,7 @@ Auth: `Authorization: Token <token>` (tabla `Session`). Roles hoy: `user`, `admi
 | 4 | `encuesta_nutricional` | encuestas nutricionales (ELCSA) con miembros del hogar | 410 personas · 162 encuestas · 445 miembros | casi todo **público** |
 | 5 | `asistencia_eventos` | digitalizar hojas de asistencia con OCR, eventos, dashboard | 208 personas · 18 eventos · 235 asistencias · 32 escaneos | cualquier rol con sesión |
 | 6 | `agrohubs` | fichas de AgroHubs para el geovisor (coordenadas, familias, video) | 0 | lectura **pública**, escritura admin |
-| 7 | `riego_iot` | gateways de riego y lecturas (lee la BD de `mqtt_agrohub`) | 16 dispositivos · ~4.8 mil lecturas de suelo y ambiente | admin, superadmin e investigador |
+| 7 | `riego_iot` | gateways de riego y lecturas (lee la BD de `mqtt_agrohub`) | 16 dispositivos · ~4.8 mil lecturas de suelo y ambiente | admin, superadmin e investigador (ver `HU_RIEGO_IOT.md`) |
 | 8 | `cartillas` | biblioteca pública de cartillas en PDF con índice y búsqueda (ver `HU_CARTILLAS.md`) | 0 al crearse | lectura **pública**; escritura admin, superadmin, investigador y comunicaciones |
 | 9 | `blogs` | entradas de blog con portada, etiquetas, borradores y programación (ver `HU_BLOGS.md`) | 0 al crearse | lectura **pública** de lo publicado; escritura admin, superadmin, investigador y comunicaciones |
 

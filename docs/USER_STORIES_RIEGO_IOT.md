@@ -1,5 +1,7 @@
 # Historias de usuario — `apps.riego_iot` (gateways de riego / dashboard MQTT)
 
+> **Versión completa y consolidada, con los roles de cada historia: [`HU_RIEGO_IOT.md`](HU_RIEGO_IOT.md).** Este archivo queda como detalle histórico de las HU-01 a HU-16.
+
 **Última actualización:** 2026-10-11 · **Quién:** equipo de la plataforma AgroHub (panel interno,
 no la app de campo). Todos los endpoints de administración requieren `Authorization: Token <token>`
 de una cuenta con rol **`admin`, `superadmin` o `investigador`** — mismo login que el resto de la app
