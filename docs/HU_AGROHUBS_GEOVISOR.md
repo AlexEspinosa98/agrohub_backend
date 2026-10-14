@@ -1,5 +1,7 @@
 # Registro de AgroHubs y geovisor — historias de usuario
 
+> Contratos para el frontend con JSON reales: **formulario manual** → [`API_AGROHUBS_FORMULARIO_FRONT.md`](API_AGROHUBS_FORMULARIO_FRONT.md) (HU-G08) · **mapa público** → [`API_GEOVISOR_FRONT.md`](API_GEOVISOR_FRONT.md).
+
 Módulo **implementado**: app `apps/agrohubs`. El **administrador** registra
 cada AgroHub (ficha con familias, lugar, asociaciones, cultivos, coordenadas y video) y el
 **geovisor** del front pinta todos en un mapa con un solo GET liviano; al tocar un punto pide el
