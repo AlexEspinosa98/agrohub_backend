@@ -10,6 +10,8 @@ urlpatterns = [
         views.rotar_password_dispositivo,
         name="riego_rotar_password",
     ),
+    path("dispositivos/<str:device_id>/energesis/", views.dispositivo_energesis, name="riego_dispositivo_energesis"),
+    path("energesis/", views.energesis_mapa, name="riego_energesis_mapa"),
     path("dispositivos/<str:device_id>/config/", views.dispositivo_config, name="riego_dispositivo_config"),
     path("dispositivos/<str:device_id>/valvulas/", views.dispositivo_valvulas, name="riego_dispositivo_valvulas"),
     path("dispositivos/<str:device_id>/cambios/", views.dispositivo_cambios, name="riego_dispositivo_cambios"),

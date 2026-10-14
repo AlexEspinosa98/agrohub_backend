@@ -207,3 +207,17 @@ Como visitante del geovisor quiero ver la temperatura y humedad actuales de un A
 Con esto, los 5 tipos de dato que el gateway reporta (ambiente, suelo, válvulas, health,
 conexión) tienen el mismo nivel de visualización: resumen en vivo (HU-05/HU-06) **y** histórico
 filtrable por fecha (HU-07 a HU-11) — antes solo ambiente y suelo tenían la parte de histórico.
+
+## Enlace con Energesis (ThingsBoard)
+
+### HU-17 — Enlazar un dispositivo nuestro con uno de Energesis
+Como administrador quiero asociar cada dispositivo nuestro (p. ej. `device0001`) con su dispositivo en la plataforma ThingsBoard de Energesis, para que la telemetría de ese dispositivo se reenvíe a Energesis sin tocar archivos del servidor.
+- `PUT /riego-iot/dispositivos/{device_id}/energesis/` con `thingsboard_token` (Access token del device en ThingsBoard), opcional `thingsboard_nombre` y `activo`. Crea o reemplaza el enlace.
+- `PATCH` cambia solo lo enviado (p. ej. `activo=false` pausa el reenvío sin perder el token).
+- El token es solo de escritura: las respuestas traen `token_configurado` y `token_ultimos4`.
+- El demonio MQTT toma el cambio en ~30 s, sin reiniciar. Rol admin/investigador.
+
+### HU-18 — Ver y quitar enlaces
+- `GET /riego-iot/dispositivos/{device_id}/energesis/`: estado del enlace, `ultimo_envio_en` y `ultimo_error` (p. ej. token rechazado).
+- `DELETE` lo elimina y el dispositivo deja de reenviarse.
+- `GET /riego-iot/energesis/`: mapa de todos los dispositivos activos con su enlace (`enlazado: true/false`) y totales.

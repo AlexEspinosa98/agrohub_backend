@@ -104,3 +104,25 @@ class EstadoConexion(models.Model):
     class Meta:
         managed = False
         db_table = "estados_conexion"
+
+
+class EnlaceEnergesis(models.Model):
+    """Enlace de un dispositivo NUESTRO (device0001...) con un dispositivo de la plataforma
+    ThingsBoard de Energesis. El demonio MQTT lee esta tabla (cada ~30 s) y reenvía la telemetría de
+    cada dispositivo usando su token. El token es un secreto: la API nunca lo devuelve completo."""
+
+    device = models.OneToOneField(
+        Dispositivo, on_delete=models.CASCADE, primary_key=True, db_column="device_id", related_name="enlace_energesis",
+    )
+    thingsboard_token = models.TextField(db_column="thingsboard_token")
+    thingsboard_nombre = models.CharField(max_length=255, null=True, blank=True, db_column="thingsboard_nombre")
+    activo = models.BooleanField(default=True, db_column="activo")
+    creado_en = models.DateTimeField(db_column="creado_en")
+    actualizado_en = models.DateTimeField(db_column="actualizado_en")
+    ultimo_envio_en = models.DateTimeField(null=True, blank=True, db_column="ultimo_envio_en")
+    ultimo_error = models.TextField(null=True, blank=True, db_column="ultimo_error")
+    ultimo_error_en = models.DateTimeField(null=True, blank=True, db_column="ultimo_error_en")
+
+    class Meta:
+        managed = False
+        db_table = "enlaces_energesis"

@@ -15,7 +15,7 @@ from rest_framework.exceptions import NotFound, ParseError, ValidationError
 from rest_framework.response import Response
 
 from apps.riego_iot.models import (
-    Dispositivo, EstadoConexion, EstadoValvula, Healthcheck, LecturaAmbiente, LecturaSuelo,
+    Dispositivo, EnlaceEnergesis, EstadoConexion, EstadoValvula, Healthcheck, LecturaAmbiente, LecturaSuelo,
 )
 from apps.riego_iot.mosquitto_admin import MosquittoAdminError, crear_credencial, eliminar_credencial, rotar_password
 from apps.riego_cambios.models import CambioRiego
@@ -26,6 +26,8 @@ from apps.riego_iot.serializers import (
     DispositivoCrearSerializer,
     DispositivoEditarSerializer,
     DispositivoSerializer,
+    EnlaceEnergesisEscrituraSerializer,
+    EnlaceEnergesisSerializer,
 )
 from apps.user_activity.authentication import TokenHeaderAuthentication
 from apps.user_activity.permissions import IsAdminOrInvestigadorRole, IsAuthenticatedWithRole
@@ -630,3 +632,111 @@ def dispositivo_cambios(request, device_id):
         for c in cambios
     ]
     return Response({"status": 200, "message": "cambios", "data": data})
+
+
+@extend_schema(
+    methods=["GET"],
+    tags=["Riego IoT - Energesis"],
+    summary="Ver el enlace de un dispositivo con Energesis (ThingsBoard)",
+    description=(
+        "Devuelve a qué dispositivo de ThingsBoard (Energesis) está enlazado este dispositivo nuestro, "
+        "si el reenvío está activo y cómo va (último envío / último error). El token nunca se devuelve "
+        "completo: solo `token_configurado` y `token_ultimos4`."
+    ),
+    responses={200: EnlaceEnergesisSerializer, 404: OpenApiResponse(description="No existe el dispositivo o no tiene enlace.")},
+)
+@extend_schema(
+    methods=["PUT", "PATCH"],
+    tags=["Riego IoT - Energesis"],
+    summary="Crear o editar el enlace con Energesis",
+    description=(
+        "Enlaza este dispositivo nuestro con uno de ThingsBoard. PUT crea el enlace (exige "
+        "`thingsboard_token`) o lo reemplaza; PATCH cambia solo los campos enviados "
+        "(`activo=false` pausa el reenvío sin perder el token). El demonio MQTT toma el cambio en "
+        "~30 s, sin reiniciar. El token se guarda tal cual y nunca se devuelve completo."
+    ),
+    request=EnlaceEnergesisEscrituraSerializer,
+    responses={200: EnlaceEnergesisSerializer, 201: EnlaceEnergesisSerializer},
+)
+@extend_schema(
+    methods=["DELETE"],
+    tags=["Riego IoT - Energesis"],
+    summary="Quitar el enlace con Energesis",
+    description="Borra el enlace (y el token guardado); el dispositivo deja de reenviarse a ThingsBoard.",
+    responses={204: None, 404: OpenApiResponse(description="No existe el dispositivo o no tiene enlace.")},
+)
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def dispositivo_energesis(request, device_id):
+    dispositivo = _obtener_dispositivo_o_404(device_id)
+    enlace = EnlaceEnergesis.objects.filter(device_id=dispositivo.device_id).first()
+
+    if request.method in ("GET", "DELETE") and not enlace:
+        raise NotFound(f"'{device_id}' no está enlazado con Energesis.")
+
+    if request.method == "GET":
+        return Response(EnlaceEnergesisSerializer(enlace).data)
+
+    if request.method == "DELETE":
+        enlace.delete()
+        return Response(status=204)
+
+    serializer = EnlaceEnergesisEscrituraSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    datos = serializer.validated_data
+    ahora = datetime.now(timezone.utc)
+
+    if enlace is None:
+        if "thingsboard_token" not in datos:
+            raise ValidationError({"thingsboard_token": "Es obligatorio para crear el enlace."})
+        enlace = EnlaceEnergesis(device=dispositivo, creado_en=ahora)
+        creado = True
+    else:
+        creado = False
+        if request.method == "PUT" and "thingsboard_token" not in datos:
+            raise ValidationError({"thingsboard_token": "PUT reemplaza el enlace: envía el token (usa PATCH para cambiar solo otros campos)."})
+
+    if "thingsboard_token" in datos and datos["thingsboard_token"] != enlace.thingsboard_token:
+        enlace.thingsboard_token = datos["thingsboard_token"]
+        enlace.ultimo_error = None  # token nuevo: el error viejo ya no aplica
+        enlace.ultimo_error_en = None
+    if "thingsboard_nombre" in datos:
+        enlace.thingsboard_nombre = datos["thingsboard_nombre"] or None
+    if "activo" in datos:
+        enlace.activo = datos["activo"]
+    if creado and "activo" not in datos:
+        enlace.activo = True
+    enlace.actualizado_en = ahora
+    enlace.save()
+    return Response(EnlaceEnergesisSerializer(enlace).data, status=201 if creado else 200)
+
+
+@extend_schema(
+    tags=["Riego IoT - Energesis"],
+    summary="Mapa de enlaces: cada dispositivo nuestro y su dispositivo en Energesis",
+    description=(
+        "Lista TODOS los dispositivos activos nuestros con su enlace a Energesis (o `enlazado=false` "
+        "si aún no lo tienen), para ver de un vistazo qué device de ellos corresponde a cuál de los nuestros."
+    ),
+    responses={200: inline_serializer("MapaEnergesis", fields={
+        "total": serializers.IntegerField(),
+        "enlazados": serializers.IntegerField(),
+        "dispositivos": serializers.ListField(child=serializers.DictField()),
+    })},
+)
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def energesis_mapa(request):
+    enlaces = {e.device_id: e for e in EnlaceEnergesis.objects.all()}
+    filas = []
+    for d in Dispositivo.objects.filter(activo=True).order_by("device_id"):
+        e = enlaces.get(d.device_id)
+        filas.append({
+            "device_id": d.device_id,
+            "nombre": d.nombre,
+            "enlazado": e is not None,
+            "enlace": EnlaceEnergesisSerializer(e).data if e else None,
+        })
+    return Response({"total": len(filas), "enlazados": sum(1 for f in filas if f["enlazado"]), "dispositivos": filas})
