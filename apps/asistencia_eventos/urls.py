@@ -9,6 +9,8 @@ urlpatterns = [
     path("scan-bulk", views.scan_bulk, name="asistencia_scan_bulk"),
     path("eventos", views.eventos_list_create, name="asistencia_eventos_list_create"),
     path("eventos/<int:evento_id>", views.evento_detail, name="asistencia_evento_detail"),
+    path("eventos/<int:evento_id>/asistentes", views.evento_asistentes_agregar, name="asistencia_evento_asistentes_agregar"),
+    path("eventos/<int:evento_id>/documento", views.evento_documento, name="asistencia_evento_documento"),
     path(
         "eventos/<int:evento_id>/asistentes/<str:numero_documento>",
         views.evento_asistente_detail,

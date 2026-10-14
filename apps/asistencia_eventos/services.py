@@ -78,30 +78,45 @@ def guardar_evento(
         registrado_por=registrado_por,
     )
     for row in data["asistentes"]:
-        # Si quien revisó no puso tipo de documento, se completa por edad (CC mayores, TI menores).
-        tipo_escrito = normalizar_tipo(row.get("tipo_documento")) or separar_tipo_y_numero(
-            row.get("numero_documento")
-        )[0]
-        row = completar_tipo_documento(dict(row))
-        persona = _upsert_persona(
-            numero_documento=row["numero_documento"],
-            tipo_documento=row.get("tipo_documento"),
-            nombre=row.get("nombre"),
-            genero=row.get("genero"),
-            pertenencia_etnica=row.get("pertenencia_etnica"),
-            tipo_inferido=tipo_escrito is None,
-            comunidad=row.get("comunidad"),
-        )
-        RegistroAsistencia.objects.update_or_create(
-            evento=evento,
-            persona=persona,
-            defaults={
-                "municipio": municipio_o_lugar(row.get("municipio"), evento),
-                "telefono": row.get("telefono"),
-                "edad": row.get("edad"),
-            },
-        )
+        _agregar_asistente(evento, row)
     return evento
+
+
+def _agregar_asistente(evento: Evento, row: dict) -> RegistroAsistencia:
+    """Upsert de la persona por documento + su participación en el evento. Si quien revisó no puso
+    tipo de documento, se completa por edad (CC mayores, TI menores)."""
+    tipo_escrito = normalizar_tipo(row.get("tipo_documento")) or separar_tipo_y_numero(
+        row.get("numero_documento")
+    )[0]
+    row = completar_tipo_documento(dict(row))
+    persona = _upsert_persona(
+        numero_documento=row["numero_documento"],
+        tipo_documento=row.get("tipo_documento"),
+        nombre=row.get("nombre"),
+        genero=row.get("genero"),
+        pertenencia_etnica=row.get("pertenencia_etnica"),
+        tipo_inferido=tipo_escrito is None,
+        comunidad=row.get("comunidad"),
+    )
+    registro, _ = RegistroAsistencia.objects.update_or_create(
+        evento=evento,
+        persona=persona,
+        defaults={
+            "municipio": municipio_o_lugar(row.get("municipio"), evento),
+            "telefono": row.get("telefono"),
+            "edad": row.get("edad"),
+        },
+    )
+    return registro
+
+
+def agregar_asistentes(evento: Evento, rows: list, editado_por=None) -> list:
+    """Alta manual de personas en un evento ya guardado. Devuelve los registros creados."""
+    registros = [_agregar_asistente(evento, row) for row in rows]
+    if editado_por is not None:
+        evento.editado_por = editado_por
+        evento.save(update_fields=["editado_por", "updated_at"])
+    return registros
 
 
 _CAMPOS_EVENTO_EDITABLES = ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final")

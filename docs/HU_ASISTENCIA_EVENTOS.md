@@ -1,5 +1,7 @@
 # Asistencia a eventos — historias de usuario para el front
 
+> **Registro manual (sin OCR):** ver [`API_ASISTENCIA_MANUAL_FRONT.md`](API_ASISTENCIA_MANUAL_FRONT.md) — HU-W33 a HU-W35 (crear a mano, agregar personas a un evento y adjuntar la hoja).
+
 Documento único para integrar el módulo **`asistencia_eventos`** (digitalizar hojas de asistencia
 manuscritas con OCR, revisarlas, guardarlas y consultar el alcance demográfico). Los ids `HU-Wxx`
 son los mismos de `historias-de-usuario.md`; acá están ordenados por el flujo de la pantalla y con

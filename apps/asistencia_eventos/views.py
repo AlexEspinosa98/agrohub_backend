@@ -10,7 +10,7 @@ from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 from rest_framework import status
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.exceptions import NotFound, ParseError
+from rest_framework.exceptions import NotFound, ParseError, ValidationError
 from rest_framework.response import Response
 
 from apps.asistencia_eventos import documentos, scan_jobs, services
@@ -18,6 +18,7 @@ from apps.asistencia_eventos.catalogos import COMUNIDADES_INDIGENAS_SUGERIDAS
 from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia, ScanJob
 from apps.asistencia_eventos.ocr_service import contar_paginas, extract_asistencia
 from apps.asistencia_eventos.serializers import (
+    AsistentesAgregarSerializer,
     EventoConfirmSerializer,
     EventoHeaderUpdateSerializer,
     PersonaUpdateSerializer,
@@ -334,6 +335,84 @@ def persona_detail(request, numero_documento: str):
                 "comunidad": persona.comunidad,
                 "eventos": services.eventos_de_persona(persona),
             },
+        }
+    )
+
+
+@api_view(["POST"])
+@authentication_classes(_AUTH)
+@permission_classes(_CUALQUIER_ROL)
+def evento_asistentes_agregar(request, evento_id: int):
+    """Alta MANUAL de una o varias personas en un evento ya guardado (formulario de asistencia sin
+    OCR). Misma forma y reglas que cada asistente de POST /eventos. Una persona que ya está en
+    ese evento se rechaza (para corregirla: PUT /eventos/<id>/asistentes/<documento>)."""
+    evento = _eventos_visibles(request).filter(id=evento_id).first()
+    if not evento:
+        raise NotFound("Evento no encontrado")
+    serializer = AsistentesAgregarSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    filas = serializer.validated_data["asistentes"]
+
+    errores = []
+    for fila in filas:
+        numero = documentos.separar_tipo_y_numero(fila.get("numero_documento"))[1] if fila.get("numero_documento") else None
+        if numero and RegistroAsistencia.objects.filter(evento=evento, persona__numero_documento=numero).exists():
+            errores.append({"numero_documento": [f"La persona {numero} ya está registrada en este evento."]})
+        else:
+            errores.append({})
+    if any(errores):
+        raise ValidationError({"asistentes": errores})
+
+    registros = services.agregar_asistentes(evento, filas, editado_por=request.user)
+    return Response(
+        {
+            "status": status.HTTP_201_CREATED,
+            "message": f"{len(registros)} asistente(s) agregados",
+            "data": {
+                "evento_id": evento.id,
+                "agregados": len(registros),
+                "total_asistentes": evento.asistentes.count(),
+                "asistentes": [
+                    {
+                        "numero_documento": r.persona.numero_documento,
+                        "tipo_documento": r.persona.tipo_documento,
+                        "nombre": r.persona.nombre,
+                        "municipio": r.municipio,
+                        "alerta": documentos.ALERTA_DOCUMENTO_PROVISIONAL
+                        if documentos.es_documento_provisional(r.persona.numero_documento)
+                        else None,
+                    }
+                    for r in registros
+                ],
+            },
+        },
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(["POST"])
+@authentication_classes(_AUTH)
+@permission_classes(_CUALQUIER_ROL)
+def evento_documento(request, evento_id: int):
+    """Adjunta o reemplaza el PDF/imagen de respaldo de un evento (útil cuando el evento se
+    registró a mano y la hoja se sube después)."""
+    evento = _eventos_visibles(request).filter(id=evento_id).first()
+    if not evento:
+        raise NotFound("Evento no encontrado")
+    upload = request.FILES.get("archivo")
+    if not upload:
+        raise ParseError("Falta el archivo (campo 'archivo')")
+    anterior = evento.documento_escaneado
+    evento.documento_escaneado = _save_scan(upload)
+    evento.editado_por = request.user
+    evento.save(update_fields=["documento_escaneado", "editado_por", "updated_at"])
+    if anterior:
+        default_storage.delete(anterior)
+    return Response(
+        {
+            "status": status.HTTP_200_OK,
+            "message": "documento guardado",
+            "data": {"evento_id": evento.id, "documento_escaneado": default_storage.url(evento.documento_escaneado)},
         }
     )
 

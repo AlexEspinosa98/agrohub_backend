@@ -107,3 +107,18 @@ class RegistroAsistenciaUpdateSerializer(serializers.Serializer):
     municipio = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     telefono = serializers.CharField(required=False, allow_null=True, allow_blank=True)
     edad = serializers.IntegerField(required=False, allow_null=True)
+
+
+class AsistentesAgregarSerializer(serializers.Serializer):
+    """POST /eventos/<id>/asistentes — alta manual de una o varias personas en un evento existente."""
+
+    asistentes = AsistenteDataSerializer(many=True)
+
+    def validate_asistentes(self, value):
+        if not value:
+            raise serializers.ValidationError("Debe incluir al menos un asistente")
+        documentos = [a["numero_documento"] for a in value if a.get("numero_documento")]
+        duplicados = {d for d in documentos if documentos.count(d) > 1}
+        if duplicados:
+            raise serializers.ValidationError(f"Documentos repetidos en la misma carga: {', '.join(sorted(duplicados))}")
+        return value
