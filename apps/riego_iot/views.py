@@ -1,6 +1,10 @@
+import json
 import secrets
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from django.conf import settings
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import (
     OpenApiExample,
@@ -740,3 +744,44 @@ def energesis_mapa(request):
             "enlace": EnlaceEnergesisSerializer(e).data if e else None,
         })
     return Response({"total": len(filas), "enlazados": sum(1 for f in filas if f["enlazado"]), "dispositivos": filas})
+
+
+@extend_schema(
+    tags=["Riego IoT - Energesis"],
+    summary="Probar el enlace: manda un dato de prueba a Energesis con el token guardado",
+    description=(
+        "Envía UN dato de prueba (`prueba_agrohub: 1`) al dispositivo de ThingsBoard enlazado, por HTTPS, usando el "
+        "token guardado (el token nunca se muestra). Sirve para validar el token sin esperar al gateway. "
+        "Responde `ok`, o el motivo del fallo (token inválido, Energesis inaccesible). Deja el resultado en "
+        "`ultimo_envio_en` / `ultimo_error`."
+    ),
+    request=None,
+    responses={200: OpenApiResponse(description="Resultado de la prueba."), 404: OpenApiResponse(description="Sin enlace.")},
+)
+@api_view(["POST"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def dispositivo_energesis_probar(request, device_id):
+    _obtener_dispositivo_o_404(device_id)
+    enlace = EnlaceEnergesis.objects.filter(device_id=device_id).first()
+    if not enlace:
+        raise NotFound(f"'{device_id}' no está enlazado con Energesis.")
+    url = f"{settings.ENERGESIS_BASE_URL.rstrip('/')}/api/v1/{enlace.thingsboard_token}/telemetry"
+    req = urllib.request.Request(
+        url, data=json.dumps({"prueba_agrohub": 1}).encode(), headers={"Content-Type": "application/json"}, method="POST",
+    )
+    ahora = datetime.now(timezone.utc)
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+        enlace.ultimo_envio_en, enlace.ultimo_error, enlace.ultimo_error_en = ahora, None, None
+        resultado = {"ok": True, "message": "Energesis aceptó el dato de prueba (clave prueba_agrohub)."}
+    except urllib.error.HTTPError as exc:
+        motivo = "token inválido o dispositivo inexistente en ThingsBoard" if exc.code in (401, 404) else f"HTTP {exc.code}"
+        enlace.ultimo_error, enlace.ultimo_error_en = f"Prueba: {motivo}", ahora
+        resultado = {"ok": False, "message": f"Energesis rechazó la prueba: {motivo}."}
+    except (urllib.error.URLError, OSError) as exc:
+        enlace.ultimo_error, enlace.ultimo_error_en = f"Prueba: no se pudo contactar a Energesis ({exc})", ahora
+        resultado = {"ok": False, "message": "No se pudo contactar a Energesis."}
+    enlace.save(update_fields=["ultimo_envio_en", "ultimo_error", "ultimo_error_en"])
+    return Response(resultado, status=200 if resultado["ok"] else 502)

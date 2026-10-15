@@ -221,3 +221,6 @@ Como administrador quiero asociar cada dispositivo nuestro (p. ej. `device0001`)
 - `GET /riego-iot/dispositivos/{device_id}/energesis/`: estado del enlace, `ultimo_envio_en` y `ultimo_error` (p. ej. token rechazado).
 - `DELETE` lo elimina y el dispositivo deja de reenviarse.
 - `GET /riego-iot/energesis/`: mapa de todos los dispositivos activos con su enlace (`enlazado: true/false`) y totales.
+
+### HU-19 — Probar un enlace antes de depender del gateway
+- `POST /riego-iot/dispositivos/{device_id}/energesis/probar/` manda un dato de prueba (`prueba_agrohub`) al dispositivo de ThingsBoard con el token guardado, por HTTPS. 200 si Energesis lo aceptó; 502 con el motivo si no (token inválido, sin conexión). El resultado queda en `ultimo_envio_en` / `ultimo_error`.

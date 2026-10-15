@@ -227,3 +227,6 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+# Plataforma ThingsBoard de Energesis (API HTTP por HTTPS) — la usa el endpoint "probar" del enlace.
+ENERGESIS_BASE_URL = os.getenv("ENERGESIS_BASE_URL", "https://iot.energesis.tech")

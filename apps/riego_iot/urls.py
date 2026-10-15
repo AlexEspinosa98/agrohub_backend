@@ -11,6 +11,7 @@ urlpatterns = [
         name="riego_rotar_password",
     ),
     path("dispositivos/<str:device_id>/energesis/", views.dispositivo_energesis, name="riego_dispositivo_energesis"),
+    path("dispositivos/<str:device_id>/energesis/probar/", views.dispositivo_energesis_probar, name="riego_dispositivo_energesis_probar"),
     path("energesis/", views.energesis_mapa, name="riego_energesis_mapa"),
     path("dispositivos/<str:device_id>/config/", views.dispositivo_config, name="riego_dispositivo_config"),
     path("dispositivos/<str:device_id>/valvulas/", views.dispositivo_valvulas, name="riego_dispositivo_valvulas"),
