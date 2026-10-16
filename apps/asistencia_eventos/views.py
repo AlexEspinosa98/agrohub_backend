@@ -13,18 +13,20 @@ from rest_framework.decorators import api_view, authentication_classes, permissi
 from rest_framework.exceptions import NotFound, ParseError, ValidationError
 from rest_framework.response import Response
 
-from apps.asistencia_eventos import documentos, scan_jobs, services
+from apps.asistencia_eventos import documentos, reportes, scan_jobs, services
 from apps.asistencia_eventos.catalogos import COMUNIDADES_INDIGENAS_SUGERIDAS
 from apps.asistencia_eventos.models import Evento, PersonaAsistente, RegistroAsistencia, ScanJob
 from apps.asistencia_eventos.ocr_service import contar_paginas, extract_asistencia
 from apps.asistencia_eventos.serializers import (
     AsistentesAgregarSerializer,
+    CorregirMunicipiosSerializer,
     EventoConfirmSerializer,
     EventoHeaderUpdateSerializer,
     PersonaUpdateSerializer,
     RegistroAsistenciaUpdateSerializer,
 )
 from apps.user_activity.authentication import TokenHeaderAuthentication
+from apps.user_activity.models import User
 from apps.user_activity.permissions import IsAdminRole, IsAuthenticatedWithRole
 
 _AUTH = [TokenHeaderAuthentication]
@@ -641,3 +643,92 @@ def dashboard_excel(request):
     )
     response["Content-Disposition"] = "attachment; filename=dashboard_asistencia_eventos.xlsx"
     return response
+
+
+# --------------------------------------------------------------------------- admin
+# Seguimiento de la meta del proyecto: mira TODO el sistema (no solo lo del usuario que consulta),
+# por eso es solo admin/superadmin. Ver reportes.py.
+
+
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def admin_meta(request):
+    """Tabla municipio x género x rango de edad contra la población objetivo (DANE), con cada persona
+    contada una sola vez por cédula, y cuántas quedaron fuera de la meta y por qué."""
+    return Response({"status": status.HTTP_200_OK, "message": "meta", "data": reportes.reporte_meta()})
+
+
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def admin_reporte_excel(request):
+    """El reporte de la meta en Excel: meta vs logrado, lo que quedó fuera, cada cédula única con su
+    clasificación, el resumen por usuario y todos los eventos."""
+    response = HttpResponse(
+        reportes.reporte_excel(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = "attachment; filename=reporte_meta_asistencia.xlsx"
+    return response
+
+
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def admin_usuarios(request):
+    """Cuántos eventos/asistencias ha subido cada usuario, con totales del sistema."""
+    usuarios, totales = reportes.resumen_por_usuario()
+    return Response(
+        {"status": status.HTTP_200_OK, "message": "usuarios", "data": {"usuarios": usuarios, "totales": totales}}
+    )
+
+
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def admin_usuario_eventos(request, user_id: int):
+    """Los eventos que subió un usuario puntual."""
+    usuario = User.objects.filter(id=user_id).first()
+    if not usuario:
+        raise NotFound("Usuario no encontrado")
+    return Response(
+        {
+            "status": status.HTTP_200_OK,
+            "message": "eventos del usuario",
+            "data": {
+                "usuario": {"id": usuario.id, "nombre": usuario.name, "email": usuario.email, "rol": usuario.role},
+                "eventos": reportes.eventos_de_usuario(user_id),
+            },
+        }
+    )
+
+
+@api_view(["GET"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def admin_municipios(request):
+    """Cada forma en que está escrito el municipio en los registros, con conteos y el municipio
+    objetivo al que parece corresponder — para decidir qué corregir con admin/municipios/corregir."""
+    return Response({"status": status.HTTP_200_OK, "message": "municipios", "data": reportes.municipios_registrados()})
+
+
+@api_view(["POST"])
+@authentication_classes(_AUTH)
+@permission_classes(_ADMIN_ONLY)
+def admin_municipios_corregir(request):
+    """Corrige el municipio en bloque, en todos los eventos de todos los usuarios (no uno por uno).
+
+    Sin `confirmar: true` solo muestra qué cambiaría (vista previa). Con él lo aplica y deja al admin
+    que lo hizo como editor de cada evento afectado."""
+    serializer = CorregirMunicipiosSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    datos = serializer.validated_data
+    resultado = reportes.corregir_municipios(
+        correcciones=datos.get("correcciones", []),
+        confirmar=datos["confirmar"],
+        usuario=request.user,
+        incluir_sugeridas=datos["incluir_sugeridas"],
+    )
+    mensaje = "municipios corregidos" if resultado["aplicado"] else "vista previa — nada se modificó"
+    return Response({"status": status.HTTP_200_OK, "message": mensaje, "data": resultado})

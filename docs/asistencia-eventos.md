@@ -231,6 +231,84 @@ Respuesta — un resultado por archivo, en el mismo orden en que se mandaron:
 
 **Importante sobre `municipio` en el dashboard de estadísticas:** el valor viene tal cual lo escribió/corrigió el usuario en el paso de revisión — no hay una lista fija de municipios validada contra catálogo. Si dos cargas escriben el mismo municipio con ortografía distinta ("Fundación" vs "fundacion"), el dashboard las cuenta como filas separadas. Si esto importa para el reporte, conviene que el frontend use un desplegable con los municipios reales de Magdalena en el paso de corrección, en vez de un campo de texto libre — el backend no impone esa restricción todavía.
 
+## Seguimiento de la meta y herramientas para admin (`/admin/...`)
+
+Todo lo de esta sección es **solo `admin` y `superadmin`** y mira **todo el sistema**, no solo lo
+que registró quien consulta (a diferencia del dashboard de arriba, que se acota por dueño): es el
+seguimiento de la población objetivo del proyecto (tabla del DANE, 4 municipios, 3.100 personas).
+La lógica está en `apps/asistencia_eventos/reportes.py`; la meta se edita en
+`META_POBLACION_OBJETIVO` de ese archivo.
+
+| Método | Ruta | Qué hace |
+|---|---|---|
+| `GET` | `/admin/meta` | Tabla municipio × género × rango de edad: meta, logrado, faltante y %. |
+| `GET` | `/admin/reporte/excel` | Ese reporte en Excel (5 hojas, abajo). |
+| `GET` | `/admin/usuarios` | Eventos, asistencias y personas distintas que ha subido cada usuario. |
+| `GET` | `/admin/usuarios/<id>/eventos` | Los eventos que subió un usuario puntual. |
+| `GET` | `/admin/municipios` | Cada forma en que está escrito el municipio, con conteos y a qué municipio parece corresponder. |
+| `POST` | `/admin/municipios/corregir` | Corrige el municipio **en bloque**, en todos los eventos (no uno por uno). |
+
+### `GET /admin/meta`
+
+Cada persona cuenta **una sola vez** (por cédula), sin importar en cuántos eventos aparezca. Devuelve
+`filas` (una por municipio y género, con `rangos` y `total`, cada celda con `meta`, `logrado`,
+`faltante`, `porcentaje`), `total_general`, `avance_efectivo`, y lo que quedó **fuera** de la meta:
+
+```json
+{
+  "personas_unicas": 777,
+  "en_meta": 391,
+  "fuera_de_meta": {"otro_municipio": 292, "genero_no_clasificable": 22, "sin_edad": 72},
+  "clasificacion_municipio": {"exacto": 380, "aproximado": 10, "contiene": 1},
+  "avance_efectivo": 12.6
+}
+```
+
+Cómo se decide (también viene en el campo `criterios` de la respuesta):
+- **Municipio:** el del registro más reciente que se pueda llevar a uno de los 4 objetivo. `exacto`
+  ignora tildes, mayúsculas y espacios; `aproximado` cubre errores de escritura ("Fondacion");
+  `contiene` es una frase que trae el nombre ("Biblioteca Algarrobo") y es la menos segura.
+- **Edad:** la del registro más reciente que la tenga. Sin edad no hay rango, y queda en `sin_edad`.
+- **Género:** el de la ficha de la persona; "Otro" o sin dato queda fuera de la meta.
+- `logrado` puede pasar de la meta; `avance_efectivo` no cuenta el exceso.
+
+Ojo: la mayor parte de lo que cae en `otro_municipio` no son otros municipios sino **lugares** (un
+colegio, una finca, una asociación), porque cuando falta el municipio se guarda el lugar del evento.
+Para llevarlos a su municipio real está la corrección en bloque.
+
+### Corregir el municipio en bloque
+
+1. `GET /admin/municipios` lista cada texto distinto con `registros`, `personas` y `sugerido`.
+2. `POST /admin/municipios/corregir`. **Sin `confirmar: true` no cambia nada**: devuelve una vista
+   previa de qué registros y eventos tocaría.
+
+```json
+{
+  "correcciones": [
+    {"desde": ["IEO Lomo del Balsamo", "IED Loma del Balsano", "L.E.O Loma del Balsamo"], "hasta": "Algarrobo"},
+    {"desde": "Foncicion", "hasta": "Fundación"}
+  ],
+  "incluir_sugeridas": true,
+  "confirmar": false
+}
+```
+
+- `desde` (lista o un solo texto) coincide con cualquier forma escrita igual sin importar
+  mayúsculas, tildes ni espacios, y cambia **todos** los registros de **todos** los eventos.
+- `incluir_sugeridas: true` agrega solas las correcciones obvias a los 4 municipios (variantes y
+  errores de escritura: "El Reten" → "El Retén"). No toca los `contiene` ("Seno Fundacion"), porque
+  ahí se perdería información.
+- Con `confirmar: true` se aplica todo en una sola transacción y el admin que lo hizo queda como
+  `editado_por` de cada evento afectado. La respuesta trae `registros_total`, `eventos_total`, el
+  detalle por corrección y `sin_coincidencia` (los textos de `desde` que ningún registro tenía).
+- No hay deshacer automático: conviene revisar la vista previa antes de confirmar.
+
+### Excel (`GET /admin/reporte/excel`)
+
+Hojas: **Meta vs logrado** (la tabla, con meta/logrado/% por rango), **Resumen y fuera de meta**,
+**Cédulas únicas** (una fila por persona con su municipio escrito y clasificado, edad, rango y por qué
+cuenta o no), **Resumen por usuario** y **Eventos**. Trae cédulas y nombres: es información de admin.
+
 ## Limitaciones conocidas del OCR
 
 Probado contra una hoja real (`CamScanner 03-09-2026 10.07.pdf` del repo, letra manuscrita, 10 asistentes):

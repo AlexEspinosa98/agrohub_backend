@@ -122,3 +122,34 @@ class AsistentesAgregarSerializer(serializers.Serializer):
         if duplicados:
             raise serializers.ValidationError(f"Documentos repetidos en la misma carga: {', '.join(sorted(duplicados))}")
         return value
+
+
+class _ListaOTexto(serializers.ListField):
+    """Acepta una lista de textos o un solo texto (que se toma como lista de uno)."""
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            data = [data]
+        return super().to_internal_value(data)
+
+
+class CorreccionMunicipioSerializer(serializers.Serializer):
+    desde = _ListaOTexto(child=serializers.CharField(max_length=100), allow_empty=False)
+    hasta = serializers.CharField(max_length=100)
+
+
+class CorregirMunicipiosSerializer(serializers.Serializer):
+    """POST /admin/municipios/corregir — cambia en bloque cómo está escrito el municipio.
+
+    Sin `confirmar` (o en false) solo devuelve qué cambiaría; con `confirmar: true` lo aplica."""
+
+    correcciones = CorreccionMunicipioSerializer(many=True, required=False)
+    incluir_sugeridas = serializers.BooleanField(required=False, default=False)
+    confirmar = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        if not attrs.get("correcciones") and not attrs.get("incluir_sugeridas"):
+            raise serializers.ValidationError(
+                "Manda al menos una corrección en 'correcciones' o activa 'incluir_sugeridas'."
+            )
+        return attrs

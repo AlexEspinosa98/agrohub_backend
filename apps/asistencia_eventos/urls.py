@@ -21,4 +21,10 @@ urlpatterns = [
     path("dashboard/resumen", views.dashboard_resumen, name="asistencia_dashboard_resumen"),
     path("dashboard/estadisticas", views.dashboard_estadisticas, name="asistencia_dashboard_estadisticas"),
     path("dashboard/excel", views.dashboard_excel, name="asistencia_dashboard_excel"),
+    path("admin/meta", views.admin_meta, name="asistencia_admin_meta"),
+    path("admin/reporte/excel", views.admin_reporte_excel, name="asistencia_admin_reporte_excel"),
+    path("admin/usuarios", views.admin_usuarios, name="asistencia_admin_usuarios"),
+    path("admin/usuarios/<int:user_id>/eventos", views.admin_usuario_eventos, name="asistencia_admin_usuario_eventos"),
+    path("admin/municipios", views.admin_municipios, name="asistencia_admin_municipios"),
+    path("admin/municipios/corregir", views.admin_municipios_corregir, name="asistencia_admin_municipios_corregir"),
 ]
