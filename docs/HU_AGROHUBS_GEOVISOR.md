@@ -17,6 +17,8 @@ Base URL: `https://back.alunaia.co/api/agrohub/agrohubs/` · Auth: `Authorizatio
 | Campo | Tipo | Obligatorio | Notas |
 |---|---|---|---|
 | `numero` | texto libre | sí | "Número de AgroHub" (ej. `AH-014`). **Único** |
+| `nombre` | texto (máx. 150) | no | nombre público del punto (ej. `Algarrobo Cabecera`) |
+| `tipologia`, `responsable`, `celular`, `tipo_fuente`, `punto_captacion` | texto | no | **datos de gestión, solo admin** (ver HU-G08); nunca salen en los endpoints públicos |
 | `departamento` | texto | sí | |
 | `municipio` | texto | sí | |
 | `es_cabecera_municipal` | booleano | sí | |
@@ -67,7 +69,7 @@ Criterios de aceptación:
 1. `POST /agrohubs/` crea la ficha. Acepta `application/json` (sin video) o `multipart/form-data`
    con `data` (JSON como texto) y `video`.
 2. Obligatorios: `numero`, `departamento`, `municipio`, `es_cabecera_municipal`, `latitud`,
-   `longitud`, y al menos una `familia`. Opcionales: `grupo_etnico`, `comunidad` (solo con
+   `longitud`, Opcionales: `nombre`, `familias` (puede ir vacía), datos de gestión (HU-G08), `grupo_etnico`, `comunidad` (solo con
    `grupo_etnico = indigena`; con otro grupo → `422` en `comunidad`), `asociaciones`, `cultivos`,
    `video`.
 3. `numero` duplicado → `422` en el campo `numero`.
@@ -103,7 +105,7 @@ Criterios de aceptación:
 Criterios de aceptación:
 
 1. `GET /agrohubs/puntos` devuelve **solo** lo necesario para el marcador: `id`, `numero`,
-   `latitud`, `longitud`, `municipio`, `departamento`.
+   `latitud`, `longitud`, `municipio`, `departamento`, `nombre`, `tiene_dispositivo`.
 2. **Sin paginación** (el mapa necesita todos) y sin listas ni video, para que pese poco.
 3. Filtros opcionales por query: `?departamento=`, `?municipio=`, `?cultivo=`,
    `?grupo_etnico=` (para filtrar capas en el mapa).
@@ -111,7 +113,7 @@ Criterios de aceptación:
 
 ```json
 { "status": 200, "message": "puntos",
-  "data": [ { "id": 3, "numero": "AH-014", "latitud": 11.2681, "longitud": -73.9872,
+  "data": [ { "id": 3, "numero": "AH-014", "nombre": "Guachaca Centro", "latitud": 11.2681, "longitud": -73.9872,
               "municipio": "Santa Marta", "departamento": "Magdalena" } ] }
 ```
 
@@ -130,7 +132,7 @@ Criterios de aceptación:
 ```json
 { "status": 200, "message": "agrohub",
   "data": {
-    "id": 3, "numero": "AH-014",
+    "id": 3, "numero": "AH-014", "nombre": "Guachaca Centro",
     "familias": ["Familia Pérez Mejía", "Familia Torres"],
     "lugar": { "departamento": "Magdalena", "municipio": "Santa Marta",
                "es_cabecera_municipal": false, "vereda": "Guachaca" },
@@ -172,7 +174,7 @@ conozca el lugar y la iniciativa.
 ### HU-G06 — Listados y catálogos para el formulario
 
 1. `GET /agrohubs/` — tabla del admin, paginada (`?page=1&page_size=20`, máx. 100) con búsqueda
-   `?q=` por número, familia, municipio, departamento o vereda. `data` = `{total, page, page_size,
+   `?q=` por número, nombre, familia, municipio, departamento o vereda. `data` = `{total, page, page_size,
    total_pages, results:[ficha]}`; cada ficha trae además `creado_por`, `creado_por_id`,
    `editado_por`, `created_at`, `updated_at`.
 2. `GET /agrohubs/catalogos` (solo admin) — opciones para los desplegables: `grupos_etnicos`, y los
@@ -214,6 +216,31 @@ Criterios de aceptación:
 
 `en_linea` es `true` si hubo una lectura en los últimos 3 minutos. La relación es entre bases de datos
 distintas (MySQL y la de `mqtt_agrohub`), por eso se valida al guardar y no con una llave foránea.
+
+---
+
+### HU-G08 — Datos de gestión del AgroHub (solo equipo)
+
+**Como** administrador o investigador, **quiero** guardar la tipología, el responsable, su celular, el
+tipo de fuente de agua y el punto de captación de cada AgroHub, **para** gestionar la red sin
+exponer datos personales en el mapa público.
+
+1. Campos opcionales en `POST /agrohubs/` y `PUT /agrohubs/<id>`: `tipologia` (Small/Medium/Large),
+   `responsable`, `celular`, `tipo_fuente` (Pozo, Río, Punto de agua, Otro) y `punto_captacion`.
+2. Se devuelven **solo con token** y rol admin/superadmin/investigador: en el listado `GET /agrohubs/`
+   y en las respuestas de crear/editar.
+3. **Nunca** aparecen en `GET /puntos`, `GET /<id>` ni `GET /<id>/datos` (públicos). El celular es un
+   dato personal (Ley 1581): no debe pintarse en el geovisor.
+4. Texto vacío se guarda como `null`.
+
+### HU-G09 — AgroHub sin familias registradas
+
+**Como** administrador, **quiero** registrar un AgroHub aunque todavía no tenga familias, **para**
+poder publicar el punto en el mapa antes de levantar esa información.
+
+1. `familias` es opcional; si no llega o va `[]`, la ficha se guarda con lista vacía.
+2. El front debe mostrar "Sin familias registradas" (o esconder el bloque) cuando la lista viene vacía,
+   igual que ya hace con `asociaciones` y `cultivos`.
 
 ---
 

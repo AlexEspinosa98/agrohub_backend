@@ -25,6 +25,7 @@ Sin paginación, liviano. Filtros opcionales (combinables, sin importar mayúscu
     {
       "id": 1,
       "numero": "AH-014",
+      "nombre": "Guachaca Centro",
       "latitud": 11.2681,
       "longitud": -73.9872,
       "municipio": "Santa Marta",
@@ -34,6 +35,7 @@ Sin paginación, liviano. Filtros opcionales (combinables, sin importar mayúscu
     {
       "id": 2,
       "numero": "AH-015",
+      "nombre": "Ciénaga Centro",
       "latitud": 11.0067,
       "longitud": -74.2478,
       "municipio": "Ciénaga",
@@ -56,6 +58,7 @@ Sin paginación, liviano. Filtros opcionales (combinables, sin importar mayúscu
     {
       "id": 1,
       "numero": "AH-014",
+      "nombre": "Guachaca Centro",
       "latitud": 11.2681,
       "longitud": -73.9872,
       "municipio": "Santa Marta",
@@ -75,6 +78,7 @@ Sin paginación, liviano. Filtros opcionales (combinables, sin importar mayúscu
   "data": {
     "id": 1,
     "numero": "AH-014",
+    "nombre": "Guachaca Centro",
     "familias": [
       "Familia Pérez Mejía",
       "Familia Torres"
@@ -116,6 +120,7 @@ Un AgroHub **sin** video, sin dispositivo y en cabecera municipal:
   "data": {
     "id": 2,
     "numero": "AH-015",
+    "nombre": "Ciénaga Centro",
     "familias": [
       "Familia Gómez"
     ],
@@ -144,8 +149,8 @@ Un AgroHub **sin** video, sin dispositivo y en cabecera municipal:
 Notas:
 - `lugar.vereda` es `null` cuando `es_cabecera_municipal` es `true`.
 - `grupo_etnico`: `null` | `ninguno` | `indigena` | `afro` | `rom` | `raizal`. `comunidad` solo viene con `indigena`.
-- `familias`, `asociaciones` y `cultivos` son listas de texto (pueden estar vacías)
-- `nombre` es el nombre público del punto (puede ser `null`)..
+- `familias`, `asociaciones` y `cultivos` son listas de texto (pueden estar vacías, también `familias`)
+- `nombre` es el nombre público del punto (puede ser `null`): usarlo como título del marcador/ficha y `numero` como código.
 - `video` es una ruta relativa al dominio: reproducir con `https://back.alunaia.co` + `video` (ej. `<video src=…>`), o `null`.
 - `dispositivo`: `{device_id, nombre}` o `null` (`nombre` puede ser `null`).
 - El detalle público **no** trae quién lo creó ni fechas de auditoría.
@@ -194,7 +199,7 @@ Notas:
 
 - Los endpoints funcionan **con y sin barra final** (`/agrohubs/puntos`, `/agrohubs/1`).
 - CORS: abiertos para el front; no se necesita cookie ni token.
-- Hoy la base está vacía: el mapa saldrá sin puntos hasta que el equipo cree el primer AgroHub.
+- Los datos de gestión (`tipologia`, `responsable`, `celular`, `tipo_fuente`, `punto_captacion`) **no** existen en estos endpoints públicos: no los busques aquí.
 
 ## 5. cURL de prueba
 
