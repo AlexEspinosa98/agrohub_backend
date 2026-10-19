@@ -13,7 +13,7 @@ en el geovisor sin depender de ninguna carga automática.
 
 Criterios de aceptación:
 1. Al abrir el formulario se cargan las opciones de los selectores (sección 1).
-2. Campos **obligatorios**: `numero`, `familias` (al menos una), `departamento`, `municipio`, `es_cabecera_municipal`,
+2. Campos **obligatorios**: `numero`, `departamento`, `municipio`, `es_cabecera_municipal`,
    `latitud` y `longitud`. Todo lo demás es opcional.
 3. `vereda` se muestra y es **obligatoria solo si "¿Es cabecera municipal?" = No**; si es Sí, se oculta y no se envía.
 4. `comunidad` se muestra solo si `grupo_etnico = indigena` (si se cambia a otro grupo, vaciarla).
@@ -155,7 +155,8 @@ Respuesta `201`:
 | Campo | Tipo | Obligatorio | Regla |
 |---|---|---|---|
 | `numero` | texto (máx. 50) | sí | **único** (sin importar mayúsculas), ej. `AH-014` |
-| `familias` | lista de textos | sí | al menos una |
+| `nombre` | texto (máx. 150) | no | nombre público del punto, ej. `Algarrobo Cabecera` |
+| `familias` | lista de textos | no | puede ir vacía (AgroHub sin familias registradas) |
 | `departamento` | texto | sí | |
 | `municipio` | texto | sí | |
 | `es_cabecera_municipal` | booleano | sí | |
@@ -167,6 +168,14 @@ Respuesta `201`:
 | `latitud` | número | sí | −90 a 90 (hasta 6 decimales) |
 | `longitud` | número | sí | −180 a 180 (hasta 6 decimales) |
 | `dispositivo` | texto (`device_id`) | no | gateway activo y libre; `null`/vacío = sin dispositivo |
+| `tipologia` | texto (máx. 50) | no | **solo gestión**: ej. `Small` |
+| `responsable` | texto (máx. 200) | no | **solo gestión** |
+| `celular` | texto (máx. 30) | no | **solo gestión** |
+| `tipo_fuente` | texto (máx. 100) | no | **solo gestión**: ej. `Pozo` |
+| `punto_captacion` | texto (máx. 150) | no | **solo gestión** |
+
+Los campos "solo gestión" (`tipologia`, `responsable`, `celular`, `tipo_fuente`, `punto_captacion`) se devuelven únicamente
+a admin/superadmin/investigador (listado y respuestas de crear/editar). **Nunca** salen en `puntos`, en el detalle público ni en `datos`.
 
 ### Errores del formulario — `422`
 
@@ -179,7 +188,6 @@ Usa `errores[].campo` para marcar el input y `mensaje` (ya está en español) pa
 | No es cabecera y falta la vereda | `vereda` | La vereda es obligatoria cuando no es cabecera municipal. |
 | Comunidad con un grupo que no es indígena | `comunidad` | Solo aplica cuando grupo_etnico es 'indigena'. |
 | Latitud o longitud fuera de rango | `latitud` / `longitud` | Asegúrese de que este valor es menor o igual a 90. |
-| Lista de familias vacía | `familias` | Esta lista no puede estar vacía. |
 | Dispositivo que no existe | `dispositivo` | No existe un dispositivo activo con id 'device9999'. |
 | Dispositivo ya usado por otro AgroHub | `dispositivo` | El dispositivo 'device0014' ya está asociado al AgroHub 'AH-014'. |
 | Falta un obligatorio | el campo | Este campo es requerido. |

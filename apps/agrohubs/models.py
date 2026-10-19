@@ -6,7 +6,10 @@ class AgroHub(models.Model):
     listas de texto libre guardadas como JSON: no hay catálogo ni integrantes por familia."""
 
     numero = models.CharField(max_length=50, unique=True)
-    familias = models.JSONField(default=list)
+    # Nombre público del punto (p. ej. "Algarrobo Cabecera"); opcional.
+    nombre = models.CharField(max_length=150, null=True, blank=True)
+    # Puede quedar vacía: hay AgroHubs que aún no tienen familias registradas.
+    familias = models.JSONField(default=list, blank=True)
     departamento = models.CharField(max_length=100)
     municipio = models.CharField(max_length=100)
     es_cabecera_municipal = models.BooleanField()
@@ -22,6 +25,12 @@ class AgroHub(models.Model):
     # Gateway IoT asociado (device_id de apps.riego_iot.Dispositivo, p. ej. "device0014"). Es otra
     # base de datos, así que no hay FK: se valida al guardar. Un dispositivo, un solo AgroHub.
     dispositivo = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    # Datos de gestión, SOLO para admin/investigador: nunca salen en los endpoints públicos.
+    tipologia = models.CharField(max_length=50, null=True, blank=True)
+    responsable = models.CharField(max_length=200, null=True, blank=True)
+    celular = models.CharField(max_length=30, null=True, blank=True)
+    tipo_fuente = models.CharField(max_length=100, null=True, blank=True)
+    punto_captacion = models.CharField(max_length=150, null=True, blank=True)
     # Ruta relativa en el storage de media; un solo video por AgroHub.
     video = models.TextField(null=True, blank=True)
     creado_por = models.ForeignKey(

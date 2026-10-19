@@ -47,6 +47,7 @@ def _detalle(a: AgroHub, admin=False) -> dict:
     data = {
         "id": a.id,
         "numero": a.numero,
+        "nombre": a.nombre,
         "familias": a.familias,
         "lugar": {
             "departamento": a.departamento,
@@ -64,6 +65,11 @@ def _detalle(a: AgroHub, admin=False) -> dict:
     }
     if admin:
         data.update(
+            tipologia=a.tipologia,
+            responsable=a.responsable,
+            celular=a.celular,
+            tipo_fuente=a.tipo_fuente,
+            punto_captacion=a.punto_captacion,
             creado_por=_nombre(a.creado_por),
             creado_por_id=a.creado_por_id,
             editado_por=_nombre(a.editado_por),
@@ -112,6 +118,7 @@ def puntos(request):
         {
             "id": a.id,
             "numero": a.numero,
+            "nombre": a.nombre,
             "latitud": float(a.latitud),
             "longitud": float(a.longitud),
             "municipio": a.municipio,
@@ -132,7 +139,7 @@ def _listar(request):
             a.id for a in AgroHub.objects.only("id", "familias") if any(q.lower() in f.lower() for f in a.familias)
         ]
         qs = qs.filter(
-            Q(numero__icontains=q) | Q(municipio__icontains=q) | Q(departamento__icontains=q)
+            Q(numero__icontains=q) | Q(nombre__icontains=q) | Q(municipio__icontains=q) | Q(departamento__icontains=q)
             | Q(vereda__icontains=q) | Q(id__in=ids_familia)
         )
     try:

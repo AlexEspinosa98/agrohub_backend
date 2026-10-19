@@ -33,7 +33,7 @@ Base URL: `https://back.alunaia.co/api/agrohub/agrohubs/` · Auth: `Authorizatio
 
 | Lista | Contenido de cada ítem | Notas |
 |---|---|---|
-| `familias` | `nombre` (ej. "Familia Pérez Mejía"); **sin integrantes** | lista; mínimo 1 |
+| `familias` | `nombre` (ej. "Familia Pérez Mejía"); **sin integrantes** | lista; puede estar vacía |
 | `asociaciones` | texto libre | lista libre; puede estar vacía |
 | `cultivos` | texto libre | lista libre; puede estar vacía |
 

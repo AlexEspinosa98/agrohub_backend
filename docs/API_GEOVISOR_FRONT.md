@@ -144,7 +144,8 @@ Un AgroHub **sin** video, sin dispositivo y en cabecera municipal:
 Notas:
 - `lugar.vereda` es `null` cuando `es_cabecera_municipal` es `true`.
 - `grupo_etnico`: `null` | `ninguno` | `indigena` | `afro` | `rom` | `raizal`. `comunidad` solo viene con `indigena`.
-- `familias`, `asociaciones` y `cultivos` son listas de texto (pueden estar vacías, salvo `familias`, que siempre tiene al menos una).
+- `familias`, `asociaciones` y `cultivos` son listas de texto (pueden estar vacías)
+- `nombre` es el nombre público del punto (puede ser `null`)..
 - `video` es una ruta relativa al dominio: reproducir con `https://back.alunaia.co` + `video` (ej. `<video src=…>`), o `null`.
 - `dispositivo`: `{device_id, nombre}` o `null` (`nombre` puede ser `null`).
 - El detalle público **no** trae quién lo creó ni fechas de auditoría.

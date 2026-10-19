@@ -10,9 +10,11 @@ from apps.agrohubs.models import AgroHub
 from apps.asistencia_eventos.catalogos import normalizar_comunidad
 
 _CAMPOS_ESCRIBIBLES = (
-    "numero", "familias", "departamento", "municipio", "es_cabecera_municipal", "vereda",
+    "numero", "nombre", "familias", "departamento", "municipio", "es_cabecera_municipal", "vereda",
     "asociaciones", "grupo_etnico", "comunidad", "cultivos", "latitud", "longitud", "dispositivo",
+    "tipologia", "responsable", "celular", "tipo_fuente", "punto_captacion",
 )
+_TEXTO_OPCIONAL = ("nombre", "tipologia", "responsable", "celular", "tipo_fuente", "punto_captacion")
 
 
 def _limpiar(data: dict) -> dict:
@@ -25,6 +27,9 @@ def _limpiar(data: dict) -> dict:
         data["comunidad"] = normalizar_comunidad(data["comunidad"])
     if "dispositivo" in data:
         data["dispositivo"] = (data["dispositivo"] or "").strip() or None
+    for campo in _TEXTO_OPCIONAL:
+        if campo in data:
+            data[campo] = (data[campo] or "").strip() or None
     if data.get("grupo_etnico") == "":
         data["grupo_etnico"] = None
     for campo in ("familias", "asociaciones", "cultivos"):

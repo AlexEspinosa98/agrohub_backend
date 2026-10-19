@@ -38,7 +38,8 @@ def _validar_reglas(attrs, actual=None):
 
 class AgroHubCreateSerializer(serializers.Serializer):
     numero = serializers.CharField(max_length=50)
-    familias = _lista_texto(allow_empty=False)
+    nombre = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=150)
+    familias = _lista_texto(required=False)
     departamento = serializers.CharField(max_length=100)
     municipio = serializers.CharField(max_length=100)
     es_cabecera_municipal = serializers.BooleanField()
@@ -48,6 +49,11 @@ class AgroHubCreateSerializer(serializers.Serializer):
     comunidad = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
     cultivos = _lista_texto(required=False)
     dispositivo = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=64)
+    tipologia = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=50)
+    responsable = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=200)
+    celular = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=30)
+    tipo_fuente = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
+    punto_captacion = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=150)
     latitud = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=Decimal("-90"), max_value=Decimal("90"))
     longitud = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=Decimal("-180"), max_value=Decimal("180"))
 
@@ -59,7 +65,8 @@ class AgroHubUpdateSerializer(serializers.Serializer):
     """PUT /agrohubs/<id> — edición parcial."""
 
     numero = serializers.CharField(max_length=50, required=False)
-    familias = _lista_texto(required=False, allow_empty=False)
+    nombre = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=150)
+    familias = _lista_texto(required=False)
     departamento = serializers.CharField(max_length=100, required=False)
     municipio = serializers.CharField(max_length=100, required=False)
     es_cabecera_municipal = serializers.BooleanField(required=False)
@@ -69,6 +76,11 @@ class AgroHubUpdateSerializer(serializers.Serializer):
     comunidad = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
     cultivos = _lista_texto(required=False)
     dispositivo = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=64)
+    tipologia = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=50)
+    responsable = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=200)
+    celular = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=30)
+    tipo_fuente = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=100)
+    punto_captacion = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=150)
     latitud = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=Decimal("-90"), max_value=Decimal("90"), required=False)
     longitud = serializers.DecimalField(max_digits=9, decimal_places=6, min_value=Decimal("-180"), max_value=Decimal("180"), required=False)
 
