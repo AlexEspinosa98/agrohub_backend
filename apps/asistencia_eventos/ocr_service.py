@@ -401,6 +401,7 @@ _LLM_SYSTEM_PROMPT = """Eres un asistente que transcribe planillas de asistencia
 
 Devuelve ÚNICAMENTE el JSON pedido, sin explicaciones ni markdown, con esta información:
 - tema, responsable, lugar, fecha, hora_inicio, hora_final: los datos del encabezado del evento. \
+La fecha va en formato AAAA-MM-DD (la planilla la escribe DD/MM/AAAA) y las horas en HH:MM de 24 horas. \
 Si esta página no trae encabezado (por ejemplo, es una página de continuación de la tabla), deja \
 esos campos en null.
 - asistentes: una fila por cada persona en la tabla, con nombre, numero_documento, municipio, \
@@ -517,6 +518,23 @@ def _run_llm_ocr(image) -> dict:
         raise OcrUnavailable(detail="El servicio de OCR (LLM local) devolvió una respuesta inesperada") from exc
 
 
+_FECHA_DMA = re.compile(r"^\s*(\d{1,2})\s*[/.\-]\s*(\d{1,2})\s*[/.\-]\s*(\d{4})\s*$")
+
+
+def _fecha_iso(valor):
+    """La planilla se escribe DD/MM/AAAA; el modelo a veces la devuelve así aunque se le pida ISO.
+    Devuelve AAAA-MM-DD si se reconoce una fecha válida; si no, el texto tal cual (para revisión)."""
+    if not valor or not isinstance(valor, str):
+        return valor
+    m = _FECHA_DMA.match(valor)
+    if not m:
+        return valor
+    dia, mes, anio = (int(x) for x in m.groups())
+    if not (1 <= mes <= 12 and 1 <= dia <= 31):
+        return valor
+    return f"{anio:04d}-{mes:02d}-{dia:02d}"
+
+
 def _estricto_openai(schema):
     """Adapta el JSON Schema al modo estricto de OpenAI: todo objeto sin propiedades extra y los
     enums que admiten null declarados también como tipo."""
@@ -610,7 +628,7 @@ def _extract_with_llm(pages: list, on_progress=None, leer_pagina=None, paralelis
             raw_parts.append(json.dumps(page_data, ensure_ascii=False))
             for campo in ("tema", "responsable", "lugar", "fecha", "hora_inicio", "hora_final"):
                 if not header.get(campo) and page_data.get(campo):
-                    header[campo] = page_data[campo]
+                    header[campo] = _fecha_iso(page_data[campo]) if campo == "fecha" else page_data[campo]
             for asistente in page_data.get("asistentes") or []:
                 asistente["tipo_documento"] = None
                 asistentes.append(asistente)
