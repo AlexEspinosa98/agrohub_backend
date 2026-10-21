@@ -108,7 +108,7 @@ Como persona nueva del equipo, quiero crear mi cuenta para poder loguearme despu
 **HU-W02 — Iniciar sesión desde la app o desde la web con la misma cuenta**
 Como usuario, quiero loguearme indicando si es desde la app o desde la web, y que ambas sesiones convivan sin que una cierre la otra.
 - `POST /user-activity/users/login` (campo opcional `platform`: `"app"` / `"web"`)
-- Criterios: un segundo login con el mismo `platform` reemplaza solo esa sesión; loguear en la otra plataforma no la afecta.
+- Criterios: se puede iniciar sesión en varios dispositivos a la vez: un login nuevo no cierra los anteriores (máximo 10 sesiones por cuenta; al pasarse se cierra la menos usada).
 
 **HU-W03 — Cerrar sesión**
 Como usuario, quiero cerrar mi sesión activa (de una sola plataforma) sin afectar la sesión que tengo abierta en la otra.

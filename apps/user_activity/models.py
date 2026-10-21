@@ -69,13 +69,10 @@ class User(models.Model):
 
 
 class Session(models.Model):
-    """One active token per (user, platform).
+    """One token per login, so the same account can be open on several devices at once.
 
-    Replaces the old single `User.auth_token` column so the same account can
-    hold one token for the app and a separate one for the web at the same
-    time, instead of the newest login kicking out the other. `platform` is a
-    loose label ("app"/"web"/null), not enforced — logging in without a
-    platform just adds another concurrent session rather than replacing one.
+    A new login never kicks out the others; `login` only prunes the least recently used
+    sessions beyond `MAX_SESIONES_POR_USUARIO`. `platform` ("app"/"web"/null) is just a label.
     """
 
     user = models.ForeignKey(

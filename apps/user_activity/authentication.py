@@ -18,8 +18,8 @@ class AnonymousUser:
 class TokenHeaderAuthentication(BaseAuthentication):
     """`Authorization: Token <token>` — the same opaque token scheme the
     FastAPI backend used (not DRF's built-in TokenAuthentication app/table).
-    Tokens live in the `Session` table (one row per user+platform), so the
-    same account can hold a separate app token and web token at once.
+    Tokens live in the `Session` table (one row per login), so the
+    same account can be open on several devices at once.
     Malformed/missing headers are left for permission classes to reject so
     the 401/403 split matches the original behavior; an unrecognized token
     fails fast here with 401."""

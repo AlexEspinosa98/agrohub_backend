@@ -65,6 +65,7 @@ from apps.user_activity.whatsapp_service import (
 )
 
 TAG = "user-activity"
+MAX_SESIONES_POR_USUARIO = 10  # dispositivos simultáneos por cuenta; al pasarse se cierra el menos usado
 _TOKEN_NOTE = "Requiere `Authorization: Token <token>` (obtenido en POST /user-activity/users/login)."
 
 
@@ -552,9 +553,11 @@ def login(request):
         return Response({"detail": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
     token = str(uuid.uuid4())
     platform = data.get("platform")
-    if platform:
-        Session.objects.filter(user=user, platform=platform).delete()
+    # Varios dispositivos a la vez: un login nuevo NO cierra las sesiones existentes. Solo se poda
+    # lo más viejo para que la tabla no crezca sin límite.
     Session.objects.create(user=user, token=token, platform=platform)
+    antiguas = Session.objects.filter(user=user).order_by("-last_used_at", "-id").values_list("id", flat=True)[MAX_SESIONES_POR_USUARIO:]
+    Session.objects.filter(id__in=list(antiguas)).delete()
     return Response(
         {
             "status": status.HTTP_200_OK,
