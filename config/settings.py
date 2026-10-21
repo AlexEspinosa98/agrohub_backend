@@ -220,6 +220,14 @@ ASISTENCIA_LLM_PARALELISMO = int(os.getenv("ASISTENCIA_LLM_PARALELISMO", "1"))
 # las imágenes (CPU) se reparte entre todas, así que cada una tarda más que sola: 300 s no alcanza.
 ASISTENCIA_LLM_TIMEOUT = int(os.getenv("ASISTENCIA_LLM_TIMEOUT", "1200"))
 ASISTENCIA_LLM_OCR_URL = os.getenv("ASISTENCIA_LLM_OCR_URL", "http://127.0.0.1:8010/v1/chat/completions")
+# "openai": mismo flujo que "llm" pero la página se lee con un modelo de visión de OpenAI (API de
+# pago, mucho más rápido que el modelo local; las páginas van en paralelo). La clave va SOLO en el
+# .env del servidor (OPENAI_API_KEY), nunca en el repo.
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+ASISTENCIA_OPENAI_MODEL = os.getenv("ASISTENCIA_OPENAI_MODEL", "gpt-4o")
+ASISTENCIA_OPENAI_URL = os.getenv("ASISTENCIA_OPENAI_URL", "https://api.openai.com/v1/chat/completions")
+ASISTENCIA_OPENAI_PARALELISMO = int(os.getenv("ASISTENCIA_OPENAI_PARALELISMO", "4"))
+ASISTENCIA_OPENAI_TIMEOUT = int(os.getenv("ASISTENCIA_OPENAI_TIMEOUT", "180"))
 
 LOGGING = {
     "version": 1,

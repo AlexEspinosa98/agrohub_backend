@@ -1,7 +1,7 @@
 """Best-effort OCR extraction for AgroHub's handwritten "Formato de
 Asistencia" sheets (see docs/asistencia-eventos.md).
 
-Two engines, picked via settings.ASISTENCIA_OCR_ENGINE ("paddleocr" | "llm"):
+Three engines, picked via settings.ASISTENCIA_OCR_ENGINE ("paddleocr" | "llm" | "openai"):
 
 - "paddleocr" (default): 100% offline/on-CPU via PaddleOCR (PP-OCRv6) — chosen
   over Tesseract because this form is handwritten, not printed: Tesseract
@@ -21,6 +21,11 @@ Two engines, picked via settings.ASISTENCIA_OCR_ENGINE ("paddleocr" | "llm"):
   output actually parses as JSON in this schema; it does NOT guarantee the
   *content* is correct, so the prompt explicitly tells the model to return
   null instead of guessing on illegible handwriting.
+
+- "openai": same idea as "llm" (whole page image in, structured JSON out, same prompt and schema)
+  but the page is read by an OpenAI vision model through its API (OPENAI_API_KEY in the server's
+  .env). Paid and the page images leave the server, but it is far faster than the local model and
+  pages are sent in parallel.
 
 Either way, accuracy on handwriting (names especially) is inherently
 limited, which is why this only produces a *draft*: the scan endpoint
@@ -512,6 +517,73 @@ def _run_llm_ocr(image) -> dict:
         raise OcrUnavailable(detail="El servicio de OCR (LLM local) devolvió una respuesta inesperada") from exc
 
 
+def _estricto_openai(schema):
+    """Adapta el JSON Schema al modo estricto de OpenAI: todo objeto sin propiedades extra y los
+    enums que admiten null declarados también como tipo."""
+    if isinstance(schema, list):
+        return [_estricto_openai(x) for x in schema]
+    if not isinstance(schema, dict):
+        return schema
+    out = {k: _estricto_openai(v) for k, v in schema.items()}
+    if out.get("type") == "object":
+        out["additionalProperties"] = False
+    if "enum" in out and "type" not in out:
+        out["type"] = ["string", "null"] if None in out["enum"] else "string"
+    return out
+
+
+def _run_openai_ocr(image) -> dict:
+    """Una página completa al modelo de visión de OpenAI; devuelve la extracción de esa página
+    (misma forma que _run_llm_ocr). Los errores salen como OcrUnavailable (503) SIN incluir la
+    clave ni la respuesta cruda."""
+    if not settings.OPENAI_API_KEY:
+        raise OcrUnavailable(detail="Falta configurar OPENAI_API_KEY en el servidor")
+    payload = {
+        "model": settings.ASISTENCIA_OPENAI_MODEL,
+        "messages": [
+            {"role": "system", "content": _LLM_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{_encode_page_png_b64(image)}", "detail": "high"},
+                    },
+                    {"type": "text", "text": "Transcribe esta página según las instrucciones."},
+                ],
+            },
+        ],
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "pagina_asistencia", "schema": _estricto_openai(_PAGINA_JSON_SCHEMA), "strict": True},
+        },
+    }
+    if settings.ASISTENCIA_OPENAI_MODEL.startswith("gpt-4"):  # los modelos nuevos solo aceptan el valor por defecto
+        payload["temperature"] = 0
+    try:
+        response = requests.post(
+            settings.ASISTENCIA_OPENAI_URL,
+            json=payload,
+            headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+            timeout=settings.ASISTENCIA_OPENAI_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise OcrUnavailable(detail=f"No se pudo contactar a OpenAI: {type(exc).__name__}") from exc
+    if response.status_code != 200:
+        try:
+            motivo = response.json().get("error", {}).get("message", "")
+        except ValueError:
+            motivo = ""
+        raise OcrUnavailable(detail=f"OpenAI respondió {response.status_code}: {motivo[:200]}")
+    try:
+        message = response.json()["choices"][0]["message"]
+        if message.get("refusal"):
+            raise OcrUnavailable(detail="OpenAI rechazó leer esta página")
+        return json.loads(message["content"])
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        raise OcrUnavailable(detail="OpenAI devolvió una respuesta inesperada") from exc
+
+
 def _resultado_llm(header, asistentes, raw_parts):
     return {
         "tema": header.get("tema"),
@@ -525,7 +597,7 @@ def _resultado_llm(header, asistentes, raw_parts):
     }
 
 
-def _extract_with_llm(pages: list, on_progress=None) -> dict:
+def _extract_with_llm(pages: list, on_progress=None, leer_pagina=None, paralelismo=None) -> dict:
     """Las páginas se mandan al LLM en paralelo (hasta ASISTENCIA_LLM_PARALELISMO a la vez; el
     candado de `_turno_llm` limita el total entre procesos). El resultado se arma SIEMPRE en el
     orden de las páginas, sin importar cuál termine primero."""
@@ -544,8 +616,10 @@ def _extract_with_llm(pages: list, on_progress=None) -> dict:
                 asistentes.append(asistente)
         return _resultado_llm(header, asistentes, raw_parts)
 
-    with ThreadPoolExecutor(max_workers=min(_paralelismo(), len(pages)) or 1) as pool:
-        futuros = {pool.submit(_run_llm_ocr, page): i for i, page in enumerate(pages)}
+    leer_pagina = leer_pagina or _run_llm_ocr
+    paralelismo = paralelismo or _paralelismo()
+    with ThreadPoolExecutor(max_workers=min(paralelismo, len(pages)) or 1) as pool:
+        futuros = {pool.submit(leer_pagina, page): i for i, page in enumerate(pages)}
         for futuro in as_completed(futuros):
             paginas_ok[futuros[futuro]] = futuro.result()  # propaga OcrUnavailable
             if on_progress:
@@ -561,7 +635,11 @@ def extract_asistencia(upload_file, on_progress=None) -> dict:
     except Exception as exc:  # noqa: BLE001
         raise OcrUnavailable(detail=f"No se pudo leer el archivo: {exc}") from exc
 
-    if settings.ASISTENCIA_OCR_ENGINE == "llm":
+    if settings.ASISTENCIA_OCR_ENGINE == "openai":
+        resultado = _extract_with_llm(
+            pages, on_progress, _run_openai_ocr, max(1, settings.ASISTENCIA_OPENAI_PARALELISMO)
+        )
+    elif settings.ASISTENCIA_OCR_ENGINE == "llm":
         resultado = _extract_with_llm(pages, on_progress)
     else:
         resultado = _extract_with_paddleocr(pages)
