@@ -5,6 +5,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from django.conf import settings
+from django.db.models import Q
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import (
     OpenApiExample,
@@ -308,14 +309,18 @@ def rotar_password_dispositivo(request, device_id):
 def _resumen_dispositivo(device_id):
     health = Healthcheck.objects.filter(device_id=device_id).order_by("-medido_en").first()
     conexion = EstadoConexion.objects.filter(device_id=device_id).order_by("-recibido_en").first()
-    ambiente = LecturaAmbiente.objects.filter(device_id=device_id).order_by("-medido_en").first()
+    # Las filas de calidad de agua (WQS) también caen en lecturas_ambiente sin temperatura/humedad:
+    # `ambiente` es la última con valores y `ultima_ambiente` la última fila de cualquier tipo.
+    todas_ambiente = LecturaAmbiente.objects.filter(device_id=device_id).order_by("-medido_en")
+    ambiente = todas_ambiente.filter(Q(temperatura__isnull=False) | Q(humedad__isnull=False)).first()
+    ultima_ambiente = todas_ambiente.values_list("medido_en", flat=True).first()
     suelo = LecturaSuelo.objects.filter(device_id=device_id).order_by("-medido_en").first()
     valvulas = EstadoValvula.objects.filter(device_id=device_id).order_by("-medido_en").first()
 
     ultimo_visto = None
-    for fila in (health, ambiente, suelo):
-        if fila and fila.medido_en:
-            ultimo_visto = max(ultimo_visto, fila.medido_en) if ultimo_visto else fila.medido_en
+    for medido_en in (health.medido_en if health else None, ultima_ambiente, suelo.medido_en if suelo else None):
+        if medido_en:
+            ultimo_visto = max(ultimo_visto, medido_en) if ultimo_visto else medido_en
 
     en_linea = bool(
         conexion and conexion.estado == "online"

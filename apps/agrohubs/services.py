@@ -151,11 +151,18 @@ def lecturas_publicas(device_id):
     válvulas, salud ni credenciales), pensado para el endpoint público."""
     from datetime import datetime, timedelta, timezone
 
+    from django.db.models import Q
+
     from apps.riego_iot.models import LecturaAmbiente, LecturaSuelo
 
-    ambiente = LecturaAmbiente.objects.filter(device_id=device_id).order_by("-medido_en").first()
+    # `lecturas_ambiente` también guarda las filas de calidad de agua (WQS, sin temperatura ni
+    # humedad del aire): la última fila de la tabla puede venir vacía, así que los valores se toman
+    # de la última que sí los trae y la "última lectura" sigue contando cualquier fila.
+    todas = LecturaAmbiente.objects.filter(device_id=device_id).order_by("-medido_en")
+    ambiente = todas.filter(Q(temperatura__isnull=False) | Q(humedad__isnull=False)).first()
+    ultima_ambiente = todas.values_list("medido_en", flat=True).first()
     suelo = LecturaSuelo.objects.filter(device_id=device_id).order_by("-medido_en").first()
-    ultima = max((f.medido_en for f in (ambiente, suelo) if f), default=None)
+    ultima = max((m for m in (ultima_ambiente, suelo.medido_en if suelo else None) if m), default=None)
     return {
         "ultima_lectura": ultima,
         # Mismo criterio que riego_iot: sin datos nuevos en 3 minutos se considera sin conexión.
