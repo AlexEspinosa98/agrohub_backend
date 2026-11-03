@@ -9,12 +9,25 @@ CLIENT_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{3,60}$")
 
 
 class DispositivoSerializer(serializers.ModelSerializer):
+    """`nombre` es el alias del gateway y `agrohub` el AgroHub donde está montado (null si no está
+    asignado). En listados la vista pasa `context["agrohubs"]` ya calculado para no consultar uno a uno."""
+
+    agrohub = serializers.SerializerMethodField()
+
     class Meta:
         model = Dispositivo
         fields = [
             "device_id", "base_topic", "client_id", "nombre", "activo",
-            "primera_vez_visto", "ultima_vez_visto",
+            "primera_vez_visto", "ultima_vez_visto", "agrohub",
         ]
+
+    def get_agrohub(self, obj):
+        mapa = self.context.get("agrohubs")
+        if mapa is None:
+            from apps.riego_iot.agrohub_enlace import agrohubs_por_dispositivo
+
+            mapa = agrohubs_por_dispositivo([obj.device_id])
+        return mapa.get(obj.device_id)
 
 
 class DispositivoCrearSerializer(serializers.Serializer):
@@ -42,6 +55,10 @@ class DispositivoEditarSerializer(serializers.Serializer):
     rotar-password/), no un simple update de fila."""
 
     nombre = serializers.CharField(allow_null=True, allow_blank=True)
+
+
+class AsignarAgroHubSerializer(serializers.Serializer):
+    agrohub_id = serializers.IntegerField(min_value=1)
 
 
 class ConfigCambioSerializer(serializers.Serializer):

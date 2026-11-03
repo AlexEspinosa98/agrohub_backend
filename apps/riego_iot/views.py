@@ -5,6 +5,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 from django.conf import settings
+from django.db import transaction
 from django.db.models import Q
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import (
@@ -22,10 +23,13 @@ from rest_framework.response import Response
 from apps.riego_iot.models import (
     Dispositivo, EnlaceEnergesis, EstadoConexion, EstadoValvula, Healthcheck, LecturaAmbiente, LecturaSuelo,
 )
+from apps.agrohubs.models import AgroHub
+from apps.riego_iot.agrohub_enlace import _resumen as _resumen_agrohub, agrohubs_por_dispositivo
 from apps.riego_iot.mosquitto_admin import MosquittoAdminError, crear_credencial, eliminar_credencial, rotar_password
 from apps.riego_cambios.models import CambioRiego
 from apps.riego_iot import control_mqtt
 from apps.riego_iot.serializers import (
+    AsignarAgroHubSerializer,
     ComandoValvulaSerializer,
     ConfigCambioSerializer,
     DispositivoCrearSerializer,
@@ -35,7 +39,7 @@ from apps.riego_iot.serializers import (
     EnlaceEnergesisSerializer,
 )
 from apps.user_activity.authentication import TokenHeaderAuthentication
-from apps.user_activity.permissions import IsAdminOrInvestigadorRole, IsAuthenticatedWithRole
+from apps.user_activity.permissions import IsAdminOrInvestigadorRole, IsAuthenticatedWithRole, IsSuperadminRole
 
 # Ventana usada para decidir "conectado ahora" cuando no hay un status/LWT reciente que lo diga
 # explícitamente — coincide con la ventana de 3 minutos del manual UG56 (sección 08) para el
@@ -55,6 +59,8 @@ VENTANA_CONEXION = timedelta(minutes=3)
 _AUTH = [TokenHeaderAuthentication]
 # Ver y administrar los dispositivos: admin, superadmin e investigador.
 _ADMIN_ONLY = [IsAuthenticatedWithRole, IsAdminOrInvestigadorRole]
+# Montar un gateway en un AgroHub (asignar / quitar): solo superadmin.
+_SUPERADMIN_ONLY = [IsAuthenticatedWithRole, IsSuperadminRole]
 
 _LECTURA_QUERY_PARAMS = [
     OpenApiParameter("desde", str, OpenApiParameter.QUERY, description="ISO 8601. Default: hasta - 7 días."),
@@ -65,6 +71,11 @@ _LECTURA_QUERY_PARAMS = [
 def _resumen_fields():
     return {
         "device_id": serializers.CharField(),
+        "nombre": serializers.CharField(allow_null=True),
+        "agrohub": inline_serializer("AgroHubDelDispositivo", {
+            "id": serializers.IntegerField(), "numero": serializers.CharField(),
+            "nombre": serializers.CharField(allow_null=True), "municipio": serializers.CharField(allow_null=True),
+        }, allow_null=True),
         "en_linea": serializers.BooleanField(),
         "ultimo_visto": serializers.DateTimeField(allow_null=True),
         "modo_control": serializers.ChoiceField(choices=["nube", "local"], allow_null=True),
@@ -152,7 +163,9 @@ def dispositivos(request):
         qs = Dispositivo.objects.all().order_by("device_id")
         if request.query_params.get("solo_activos") == "true":
             qs = qs.filter(activo=True)
-        return Response(DispositivoSerializer(qs, many=True).data)
+        qs = list(qs)
+        contexto = {"agrohubs": agrohubs_por_dispositivo([d.device_id for d in qs])}
+        return Response(DispositivoSerializer(qs, many=True, context=contexto).data)
 
     serializer = DispositivoCrearSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
@@ -266,6 +279,64 @@ def dispositivo_detalle(request, device_id):
 
 
 @extend_schema(
+    methods=["PUT"],
+    tags=["riego-iot"],
+    summary="Montar un gateway en un AgroHub (solo superadmin)",
+    description=(
+        "Asocia el gateway al AgroHub indicado. Si el gateway estaba en otro AgroHub se mueve "
+        "(ese queda sin dispositivo) y si el AgroHub tenía otro gateway, ese queda libre; la respuesta "
+        "dice qué se movió en `reasignado_desde` y `liberado`."
+    ),
+    request=AsignarAgroHubSerializer,
+    responses={
+        200: DispositivoSerializer,
+        400: OpenApiResponse(description="El dispositivo está dado de baja o el AgroHub no existe."),
+        403: OpenApiResponse(description="Requiere rol superadmin."),
+        404: OpenApiResponse(description="No existe ese device_id."),
+    },
+)
+@extend_schema(
+    methods=["DELETE"],
+    tags=["riego-iot"],
+    summary="Quitar un gateway de su AgroHub (solo superadmin)",
+    responses={204: OpenApiResponse(description="Gateway sin AgroHub (si ya no tenía, no pasa nada)."),
+               403: OpenApiResponse(description="Requiere rol superadmin."),
+               404: OpenApiResponse(description="No existe ese device_id.")},
+)
+@api_view(["PUT", "DELETE"])
+@authentication_classes(_AUTH)
+@permission_classes(_SUPERADMIN_ONLY)
+def dispositivo_agrohub(request, device_id):
+    dispositivo = _obtener_dispositivo_o_404(device_id)
+
+    if request.method == "DELETE":
+        AgroHub.objects.filter(dispositivo=device_id).update(dispositivo=None)
+        return Response(status=204)
+
+    serializer = AsignarAgroHubSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    if not dispositivo.activo:
+        raise ValidationError({"detail": f"El dispositivo '{device_id}' está dado de baja."})
+    destino = AgroHub.objects.filter(id=serializer.validated_data["agrohub_id"]).first()
+    if not destino:
+        raise ValidationError({"agrohub_id": "No existe un AgroHub con ese id."})
+
+    with transaction.atomic():
+        origen = AgroHub.objects.select_for_update().filter(dispositivo=device_id).exclude(id=destino.id).first()
+        liberado = destino.dispositivo if destino.dispositivo and destino.dispositivo != device_id else None
+        # dispositivo es único: primero se libera el lugar anterior y luego se ocupa el nuevo.
+        if origen:
+            AgroHub.objects.filter(id=origen.id).update(dispositivo=None)
+        AgroHub.objects.filter(id=destino.id).update(dispositivo=device_id)
+
+    return Response({
+        **DispositivoSerializer(dispositivo, context={"agrohubs": {device_id: _resumen_agrohub(destino)}}).data,
+        "reasignado_desde": _resumen_agrohub(origen) if origen else None,
+        "liberado": liberado,
+    })
+
+
+@extend_schema(
     tags=["riego-iot"],
     summary="Rotar la contraseña MQTT de un gateway",
     description="La contraseña anterior deja de funcionar de inmediato al aplicarse (recarga el broker).",
@@ -306,7 +377,7 @@ def rotar_password_dispositivo(request, device_id):
     })
 
 
-def _resumen_dispositivo(device_id):
+def _resumen_dispositivo(device_id, alias=None, agrohub=None):
     health = Healthcheck.objects.filter(device_id=device_id).order_by("-medido_en").first()
     conexion = EstadoConexion.objects.filter(device_id=device_id).order_by("-recibido_en").first()
     # Las filas de calidad de agua (WQS) también caen en lecturas_ambiente sin temperatura/humedad:
@@ -334,6 +405,8 @@ def _resumen_dispositivo(device_id):
 
     return {
         "device_id": device_id,
+        "nombre": alias,
+        "agrohub": agrohub,
         "en_linea": en_linea,
         "ultimo_visto": ultimo_visto,
         "modo_control": health.modo_control if health else None,
@@ -356,8 +429,9 @@ def _resumen_dispositivo(device_id):
 def dashboard_resumen(request):
     """Todos los gateways activos con su último dato de cada tipo — las variables que se están
     enviando ahora mismo, de un vistazo."""
-    ids = Dispositivo.objects.filter(activo=True).order_by("device_id").values_list("device_id", flat=True)
-    return Response([_resumen_dispositivo(device_id) for device_id in ids])
+    filas = list(Dispositivo.objects.filter(activo=True).order_by("device_id").values_list("device_id", "nombre"))
+    agrohubs = agrohubs_por_dispositivo([d for d, _ in filas])
+    return Response([_resumen_dispositivo(d, alias, agrohubs.get(d)) for d, alias in filas])
 
 
 @extend_schema(
@@ -369,8 +443,10 @@ def dashboard_resumen(request):
 @authentication_classes(_AUTH)
 @permission_classes(_ADMIN_ONLY)
 def dashboard_detalle(request, device_id):
-    _obtener_dispositivo_o_404(device_id)
-    return Response(_resumen_dispositivo(device_id))
+    dispositivo = _obtener_dispositivo_o_404(device_id)
+    return Response(_resumen_dispositivo(
+        device_id, dispositivo.nombre, agrohubs_por_dispositivo([device_id]).get(device_id),
+    ))
 
 
 def _rango_fechas(request):

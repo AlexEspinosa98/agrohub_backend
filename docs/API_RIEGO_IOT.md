@@ -60,6 +60,8 @@ Con rol `user` (ni admin, superadmin ni investigador), `403`:
 | `PATCH` | `/dispositivos/{device_id}/` | Cambia el `nombre` de un gateway ya registrado |
 | `DELETE` | `/dispositivos/{device_id}/` | Revoca el acceso de un gateway y lo marca inactivo |
 | `POST` | `/dispositivos/{device_id}/rotar-password/` | Genera una contraseña nueva para ese gateway |
+| `PUT` | `/dispositivos/{device_id}/agrohub/` | **Solo superadmin.** Monta el gateway en un AgroHub |
+| `DELETE` | `/dispositivos/{device_id}/agrohub/` | **Solo superadmin.** Quita el gateway de su AgroHub |
 | `GET` | `/dashboard/resumen/` | Última lectura de cada tipo, de todos los gateways activos |
 | `GET` | `/dashboard/{device_id}/` | Lo mismo, para un solo gateway |
 | `GET` | `/dashboard/{device_id}/lecturas/ambiente/` | Histórico de temperatura/humedad ambiente |
@@ -278,6 +280,28 @@ Response `200`:
 **Después de rotar, hay que actualizar la contraseña en el gateway físico** (Node-RED → nodo
 "Servidor MQTT") — mientras no se actualice, ese gateway queda desconectado.
 </details>
+
+## `PUT` y `DELETE /dispositivos/{device_id}/agrohub/` (solo superadmin)
+
+Un gateway no siempre queda montado en el AgroHub con su mismo número (el `device0014` puede estar en
+AH-002). Esta es la forma de decir **en qué AgroHub está cada gateway**; las respuestas de
+`/dispositivos/`, `/dispositivos/{id}/`, `/dashboard/resumen/` y `/dashboard/{id}/` traen ahora:
+
+- `nombre`: el alias del gateway (se edita con `PATCH /dispositivos/{id}/`).
+- `agrohub`: `{ "id", "numero", "nombre", "municipio" }` del AgroHub donde está montado, o `null`.
+
+```
+PUT /api/agrohub/riego-iot/dispositivos/device0014/agrohub/
+{ "agrohub_id": 24 }
+```
+
+`200`: el gateway (como en `GET /dispositivos/{id}/`) más `reasignado_desde` (el AgroHub donde
+estaba antes, si se movió) y `liberado` (el `device_id` que tenía el AgroHub destino y quedó libre).
+`400` si el gateway está dado de baja o el AgroHub no existe; `403` si no es superadmin.
+`DELETE` responde `204`. El AgroHub también guarda el vínculo (`dispositivo` en `/agrohubs/{id}`), así
+que el geovisor lo refleja de inmediato.
+
+---
 
 ## `GET /dashboard/resumen/`
 
