@@ -241,7 +241,7 @@ La lógica está en `apps/asistencia_eventos/reportes.py`; la meta se edita en
 
 | Método | Ruta | Qué hace |
 |---|---|---|
-| `GET` | `/admin/meta` | Tabla municipio × género × rango de edad: meta, logrado, faltante y %. |
+| `GET` | `/admin/meta` | Tabla municipio × género × rango de edad: meta, logrado (tope = meta), excedente, faltante y %. |
 | `GET` | `/admin/reporte/excel` | Ese reporte en Excel (5 hojas, abajo). |
 | `GET` | `/admin/usuarios` | Eventos, asistencias y personas distintas que ha subido cada usuario. |
 | `GET` | `/admin/usuarios/<id>/eventos` | Los eventos que subió un usuario puntual. |
@@ -252,12 +252,14 @@ La lógica está en `apps/asistencia_eventos/reportes.py`; la meta se edita en
 
 Cada persona cuenta **una sola vez** (por cédula), sin importar en cuántos eventos aparezca. Devuelve
 `filas` (una por municipio y género, con `rangos` y `total`, cada celda con `meta`, `logrado`,
-`faltante`, `porcentaje`), `total_general`, `avance_efectivo`, y lo que quedó **fuera** de la meta:
+`registradas`, `excedente`, `faltante`, `porcentaje`), `total_general`, `avance_efectivo`, y lo que
+quedó **fuera** de la meta:
 
 ```json
 {
   "personas_unicas": 777,
   "en_meta": 391,
+  "excedente_meta_cumplida": 0,
   "fuera_de_meta": {"otro_municipio": 292, "genero_no_clasificable": 22, "sin_edad": 72},
   "clasificacion_municipio": {"exacto": 380, "aproximado": 10, "contiene": 1},
   "avance_efectivo": 12.6
@@ -270,7 +272,12 @@ Cómo se decide (también viene en el campo `criterios` de la respuesta):
   `contiene` es una frase que trae el nombre ("Biblioteca Algarrobo") y es la menos segura.
 - **Edad:** la del registro más reciente que la tenga. Sin edad no hay rango, y queda en `sin_edad`.
 - **Género:** el de la ficha de la persona; "Otro" o sin dato queda fuera de la meta.
-- `logrado` puede pasar de la meta; `avance_efectivo` no cuenta el exceso.
+- **Cada celda aporta como máximo su meta.** Si una celda (municipio × género × rango) ya la cumplió,
+  las personas únicas que siguen llegando a ella **no suman**: `registradas` = personas únicas de la
+  celda, `logrado` = las que cuentan (`min(registradas, meta)`), `excedente` = las que sobran. Cuentan
+  primero las registradas antes (menor id de persona). Solo hay **un** porcentaje, `logrado / meta`
+  (0–100): el de celdas, filas, totales y `avance_efectivo` es el mismo. Arriba,
+  `personas_unicas = en_meta + excedente_meta_cumplida + fuera_de_meta`.
 
 Ojo: la mayor parte de lo que cae en `otro_municipio` no son otros municipios sino **lugares** (un
 colegio, una finca, una asociación), porque cuando falta el municipio se guarda el lugar del evento.
@@ -305,9 +312,9 @@ Para llevarlos a su municipio real está la corrección en bloque.
 
 ### Excel (`GET /admin/reporte/excel`)
 
-Hojas: **Meta vs logrado** (la tabla, con meta/logrado/% por rango), **Resumen y fuera de meta**,
+Hojas: **Meta vs logrado** (la tabla, con meta/logrado/%/excedente por rango), **Resumen y fuera de meta**,
 **Cédulas únicas** (una fila por persona con su municipio escrito y clasificado, edad, rango y por qué
-cuenta o no), **Resumen por usuario** y **Eventos**. Trae cédulas y nombres: es información de admin.
+cuenta o no; "Meta de su celda ya cumplida" = única pero no suma), **Resumen por usuario** y **Eventos**. Trae cédulas y nombres: es información de admin.
 
 ## Limitaciones conocidas del OCR
 

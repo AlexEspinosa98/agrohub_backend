@@ -54,8 +54,12 @@ CRITERIOS = [
     "o de un texto que solo contiene el nombre).",
     "Edad: la del registro más reciente que la tenga. Sin edad no se puede ubicar en un rango.",
     "Género: Masculino/Femenino de la ficha de la persona. 'Otro' o sin dato queda fuera de la meta.",
-    "'logrado' puede superar la meta de una celda; 'faltante' nunca baja de 0 y 'avance_efectivo' "
-    "no cuenta el exceso (cada celda aporta como máximo su meta).",
+    "Cada celda (municipio x género x rango de edad) aporta como máximo su meta: la persona única que "
+    "llega cuando esa celda ya está cumplida NO suma a 'logrado' ni al porcentaje; se informa aparte "
+    "como 'excedente' ('registradas' = personas únicas de la celda, 'logrado' = las que cuentan). "
+    "Cuentan primero las personas registradas antes (menor id de persona).",
+    "El porcentaje es único: logrado / meta, siempre entre 0 y 100, igual en celdas, filas, totales y "
+    "'avance_efectivo'.",
 ]
 
 
@@ -108,65 +112,91 @@ def _estado_persona(p):
     return "en_meta", rango, genero
 
 
-def _celda(meta, logrado):
+def _celda(meta, registradas):
+    """registradas = personas únicas que caen en la celda; solo cuentan hasta la meta."""
+    logrado = min(registradas, meta)
     return {
         "meta": meta,
         "logrado": logrado,
-        "faltante": max(meta - logrado, 0),
+        "registradas": registradas,
+        "excedente": registradas - logrado,
+        "faltante": meta - logrado,
         "porcentaje": round(100 * logrado / meta, 1) if meta else None,
     }
 
 
+def _sumar_celdas(celdas):
+    """Total de varias celdas: suma lo que cuenta de cada una (no se recalcula el tope sobre la suma)."""
+    meta = sum(c["meta"] for c in celdas)
+    logrado = sum(c["logrado"] for c in celdas)
+    registradas = sum(c["registradas"] for c in celdas)
+    return {
+        "meta": meta,
+        "logrado": logrado,
+        "registradas": registradas,
+        "excedente": registradas - logrado,
+        "faltante": meta - logrado,
+        "porcentaje": round(100 * logrado / meta, 1) if meta else None,
+    }
+
+
+def clasificar_personas(personas):
+    """[(persona, estado, rango, genero)]. Igual que _estado_persona, pero las personas que caen en una
+    celda ya cumplida quedan como 'meta_cumplida' (siguen siendo únicas, pero no suman a la meta)."""
+    filas = [(p, *_estado_persona(p)) for p in personas]
+    cupo = defaultdict(int)
+    resultado = []
+    for p, estado, rango, genero in sorted(filas, key=lambda f: f[0]["persona"].id):
+        if estado == "en_meta":
+            clave = (p["municipio"], genero, rango)
+            if cupo[clave] >= META_POBLACION_OBJETIVO[p["municipio"]][genero][rango]:
+                estado = "meta_cumplida"
+            else:
+                cupo[clave] += 1
+        resultado.append((p, estado, rango, genero))
+    return resultado
+
+
 def reporte_meta(personas=None):
     personas = _personas_unicas() if personas is None else personas
-    logrado = defaultdict(int)
+    registradas = defaultdict(int)
     fuera = {"otro_municipio": 0, "genero_no_clasificable": 0, "sin_edad": 0}
     metodos = {"exacto": 0, "aproximado": 0, "contiene": 0}
     for p in personas:
         estado, rango, genero = _estado_persona(p)
         if estado == "en_meta":
-            logrado[(p["municipio"], genero, rango)] += 1
-            metodos[p["metodo"]] += 1
+            registradas[(p["municipio"], genero, rango)] += 1
         else:
             fuera[estado] += 1
+    for p, estado, _, _ in clasificar_personas(personas):
+        if estado == "en_meta":
+            metodos[p["metodo"]] += 1
 
     filas = []
-    total_rango = {r: [0, 0] for r in RANGOS}  # [meta, logrado]
-    total_meta = total_logrado = efectivo = 0
+    por_rango = {r: [] for r in RANGOS}
+    todas = []
     for municipio in MUNICIPIOS_OBJETIVO:
         for genero in GENEROS_META:
-            rangos, fila_meta, fila_logrado = {}, 0, 0
+            rangos = {}
             for r in RANGOS:
-                meta = META_POBLACION_OBJETIVO[municipio][genero][r]
-                log = logrado[(municipio, genero, r)]
-                rangos[r] = _celda(meta, log)
-                fila_meta += meta
-                fila_logrado += log
-                total_rango[r][0] += meta
-                total_rango[r][1] += log
-                efectivo += min(log, meta)
-            total_meta += fila_meta
-            total_logrado += fila_logrado
+                celda = _celda(META_POBLACION_OBJETIVO[municipio][genero][r], registradas[(municipio, genero, r)])
+                rangos[r] = celda
+                por_rango[r].append(celda)
+                todas.append(celda)
             filas.append(
-                {
-                    "municipio": municipio,
-                    "genero": genero,
-                    "rangos": rangos,
-                    "total": _celda(fila_meta, fila_logrado),
-                }
+                {"municipio": municipio, "genero": genero, "rangos": rangos, "total": _sumar_celdas(list(rangos.values()))}
             )
 
+    total = _sumar_celdas(todas)
     return {
         "fuente": FUENTE_META,
         "rangos": RANGOS,
         "filas": filas,
-        "total_general": {
-            "rangos": {r: _celda(m, l) for r, (m, l) in total_rango.items()},
-            "total": _celda(total_meta, total_logrado),
-        },
-        "avance_efectivo": round(100 * efectivo / total_meta, 1) if total_meta else None,
+        "total_general": {"rangos": {r: _sumar_celdas(c) for r, c in por_rango.items()}, "total": total},
+        "avance_efectivo": total["porcentaje"],
         "personas_unicas": len(personas),
-        "en_meta": sum(logrado.values()),
+        "en_meta": total["logrado"],
+        "excedente_meta_cumplida": total["excedente"],
         "fuera_de_meta": fuera,
         "clasificacion_municipio": metodos,
         "criterios": CRITERIOS,
@@ -388,25 +418,30 @@ def reporte_excel():
         for r in RANGOS:
             c = f["rangos"][r]
             fila[f"{r} meta"], fila[f"{r} logrado"], fila[f"{r} %"] = c["meta"], c["logrado"], c["porcentaje"]
+            fila[f"{r} excedente"] = c["excedente"]
         t = f["total"]
         fila["Total meta"], fila["Total logrado"], fila["Total %"] = t["meta"], t["logrado"], t["porcentaje"]
+        fila["Total excedente"] = t["excedente"]
         filas_meta.append(fila)
     tg = meta["total_general"]
     fila = {"Municipio": "TOTAL", "Género": ""}
     for r in RANGOS:
         c = tg["rangos"][r]
         fila[f"{r} meta"], fila[f"{r} logrado"], fila[f"{r} %"] = c["meta"], c["logrado"], c["porcentaje"]
+        fila[f"{r} excedente"] = c["excedente"]
     fila["Total meta"], fila["Total logrado"], fila["Total %"] = (
         tg["total"]["meta"],
         tg["total"]["logrado"],
         tg["total"]["porcentaje"],
     )
+    fila["Total excedente"] = tg["total"]["excedente"]
     filas_meta.append(fila)
 
     fuera = meta["fuera_de_meta"]
     resumen = [
         {"Indicador": "Personas únicas (por cédula)", "Valor": meta["personas_unicas"]},
-        {"Indicador": "Cuentan en la meta", "Valor": meta["en_meta"]},
+        {"Indicador": "Cuentan en la meta (hasta el tope de cada celda)", "Valor": meta["en_meta"]},
+        {"Indicador": "Únicas pero NO suman: su celda ya cumplió la meta", "Valor": meta["excedente_meta_cumplida"]},
         {"Indicador": "Fuera de meta: municipio que no es de los 4 objetivo", "Valor": fuera["otro_municipio"]},
         {"Indicador": "Fuera de meta: género Otro o sin dato", "Valor": fuera["genero_no_clasificable"]},
         {"Indicador": "Fuera de meta: sin edad", "Valor": fuera["sin_edad"]},
@@ -417,13 +452,15 @@ def reporte_excel():
 
     etiquetas = {
         "en_meta": "En meta",
+        "meta_cumplida": "Meta de su celda ya cumplida (no suma)",
         "otro_municipio": "Municipio fuera de los 4 objetivo",
         "genero_no_clasificable": "Género Otro o sin dato",
         "sin_edad": "Sin edad",
     }
     cedulas = []
-    for p in sorted(personas, key=lambda p: p["persona"].numero_documento):
-        estado, rango, genero = _estado_persona(p)
+    for p, estado, rango, genero in sorted(
+        clasificar_personas(personas), key=lambda f: f[0]["persona"].numero_documento
+    ):
         cedulas.append(
             {
                 "Cédula": p["persona"].numero_documento,
