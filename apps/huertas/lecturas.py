@@ -49,7 +49,8 @@ def _ventana(desde, hasta):
     desde = desde or (hasta - VENTANA_DEFECTO)
     if hasta <= desde:
         raise ValueError("`hasta` debe ser posterior a `desde`.")
-    if hasta - desde > VENTANA_MAXIMA:
+    # Holgura de un paso: «los últimos 8 días» pedidos desde el navegador llegan con milisegundos de más.
+    if hasta - desde > VENTANA_MAXIMA + timedelta(seconds=PASO_S):
         raise ValueError("La ventana máxima es de 8 días por consulta.")
     return desde, hasta
 

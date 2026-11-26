@@ -355,6 +355,8 @@ def generar(agrohub, automatico=False):
             f"Ya se hizo un seguimiento hace poco. El próximo se puede pedir desde las {timezone.localtime(espera):%H:%M del %d/%m}.",
             429,
         )
+    if not agrohub.camas.exists() and not Reporte.objects.filter(agrohub=agrohub, moderacion="visible").exists():
+        raise SeguimientoError("La huerta todavía no tiene camas ni reportes: no hay nada que contar.", 422)
     tope = Decimal(str(getattr(settings, "HUERTAS_LLM_TOPE_USD_MES", 5)))
     if gasto_del_mes() >= tope:
         raise SeguimientoError("Se alcanzó el tope mensual de seguimientos. Vuelve a intentarlo el próximo mes.", 429)

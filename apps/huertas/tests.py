@@ -288,6 +288,8 @@ class LecturasTests(BaseHuertas):
     def test_ventana_maxima(self):
         r = self.anonimo().get("/agrohubs/AH-002/lecturas", {"desde": "2020-01-01"})
         self.assertEqual(r.status_code, 422)
+        r = self.anonimo().get("/agrohubs/AH-002/lecturas", {"desde": int(_dt(8 * 24 * 60).timestamp() * 1000)})
+        self.assertEqual(r.status_code, 200)  # «los últimos 8 días» exactos
 
     def test_sin_gateway(self):
         d = self.anonimo().get("/agrohubs/AH-003/lecturas").json()["data"]
@@ -440,13 +442,22 @@ class SeguimientoTests(BaseHuertas):
 
     @override_settings(OPENAI_API_KEY="sk-prueba", HUERTAS_LLM_TOPE_USD_MES=0)
     def test_tope_mensual(self):
+        self.camas()
         r = self.anonimo().post("/agrohubs/AH-002/seguimiento")
         self.assertEqual(r.status_code, 429)
 
     @override_settings(OPENAI_API_KEY="", GEMINI_API_KEY="", HUERTAS_LLM_PROVEEDOR="")
     def test_sin_llave(self):
+        self.camas()
         r = self.anonimo().post("/agrohubs/AH-002/seguimiento")
         self.assertEqual(r.status_code, 503)
+
+    @override_settings(OPENAI_API_KEY="sk-prueba")
+    def test_huerta_vacia_no_gasta(self):
+        with mock.patch("apps.huertas.seguimiento._llamar_openai") as llamar:
+            r = self.anonimo().post("/agrohubs/AH-002/seguimiento")
+        self.assertEqual(r.status_code, 422)
+        llamar.assert_not_called()
 
 
 class ResumenTests(BaseHuertas):
