@@ -356,7 +356,9 @@ class ReportesTests(BaseHuertas):
         foto = SimpleUploadedFile("mata.png", buf.getvalue(), content_type="image/png")
         r = self.anonimo().post("/agrohubs/AH-002/reportes", {**REPORTE, "foto": foto}, format="multipart")
         self.assertEqual(r.status_code, 201, r.content)
-        self.assertTrue(r.json()["data"]["foto"].endswith(".jpg"))
+        foto_url = r.json()["data"]["foto"]
+        self.assertTrue(foto_url.endswith(".jpg"))
+        self.assertTrue(foto_url.startswith("https://") or foto_url.startswith("http"), foto_url)
 
 
 class BitacoraTests(BaseHuertas):

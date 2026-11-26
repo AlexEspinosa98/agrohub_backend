@@ -237,6 +237,9 @@ HUERTAS_ENVIAR_UMBRALES = os.getenv("HUERTAS_ENVIAR_UMBRALES", "false").lower() 
 HUERTAS_LLM_PROVEEDOR = os.getenv("HUERTAS_LLM_PROVEEDOR", "")
 HUERTAS_LLM_MODELO = os.getenv("HUERTAS_LLM_MODELO", "")
 HUERTAS_LLM_TOPE_USD_MES = float(os.getenv("HUERTAS_LLM_TOPE_USD_MES", "5"))
+# Origen público del backend: los archivos que se le entregan a otro dominio (el front de Huertas
+# abiertas pinta la foto de un reporte con <img>) van con la URL completa, no relativa a MEDIA_URL.
+PUBLIC_BACKEND_ORIGIN = os.getenv("PUBLIC_BACKEND_ORIGIN", "https://back.alunaia.co").rstrip("/")
 
 LOGGING = {
     "version": 1,

@@ -119,7 +119,16 @@ def _instante(valor, nombre):
 
 
 def _url(ruta):
-    return default_storage.url(ruta) if ruta else None
+    """URL completa del archivo: el front vive en otro dominio y una ruta relativa
+    (/api/agrohub/media/...) le da 404."""
+    if not ruta:
+        return None
+    url = default_storage.url(ruta)
+    if url.startswith("/"):
+        from django.conf import settings
+
+        url = f"{settings.PUBLIC_BACKEND_ORIGIN}{url}"
+    return url
 
 
 # ======================================================================== HB01 · Biblioteca
