@@ -105,7 +105,18 @@ class Logbook(models.Model):
     title = models.TextField()
     description = models.TextField()
     activity_date = models.DateField()
+    # Lo manda el frontend de /bitacora desde siempre; antes se descartaba.
+    activity_type = models.CharField(max_length=30, null=True, blank=True)
+    moon_phase = models.CharField(max_length=40, null=True, blank=True)
+    # Huertas abiertas (HU-HB05): entrada escrita desde la vista de un AgroHub, y si la ve
+    # cualquiera (True) o solo quien cuida esa huerta y el equipo (False).
+    agrohub = models.ForeignKey(
+        "agrohubs.AgroHub", null=True, blank=True, on_delete=models.SET_NULL,
+        db_column="agrohub_id", related_name="bitacora",
+    )
+    publica = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True)
 
     class Meta:
         db_table = "logbooks"

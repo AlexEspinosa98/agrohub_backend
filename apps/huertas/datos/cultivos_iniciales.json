@@ -1,0 +1,1245 @@
+[
+ {
+  "id": "tomate",
+  "nombre": "Tomate",
+  "forma": "mata",
+  "fruto": "#d6453a",
+  "familia": "solanaceas",
+  "sed": 1,
+  "abrir": 30,
+  "cerrar": 42,
+  "kc": [
+   0.6,
+   1.15,
+   0.8
+  ],
+  "agotable": 0.4,
+  "raiz": [
+   0.7,
+   1.5
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   20,
+   27
+  ],
+  "calorFuerte": 34,
+  "siembra": "trasplante",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Prende",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 14
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 35
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Carga fruto",
+    "desde": 50
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 80
+   }
+  ],
+  "cosechaDias": 45,
+  "perenne": false,
+  "distancia": "40 cm entre matas y 1 m entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "cilantro",
+   "cebollin",
+   "lechuga",
+   "oregano"
+  ],
+  "evitar": [
+   "col",
+   "maiz"
+  ],
+  "plagas": [
+   "Mosca blanca",
+   "Gusano del fruto",
+   "Gota o tizón"
+  ],
+  "senal": "El fruto cambia de verde a pintón: se coge pintón para que aguante.",
+  "consejo": "Ponle tutor y quítale los chupones. Riégalo al pie, sin mojar las hojas."
+ },
+ {
+  "id": "aji",
+  "nombre": "Ají",
+  "forma": "mata",
+  "fruto": "#e0612b",
+  "familia": "solanaceas",
+  "sed": 0.95,
+  "abrir": 30,
+  "cerrar": 42,
+  "kc": [
+   0.6,
+   1.05,
+   0.9
+  ],
+  "agotable": 0.3,
+  "raiz": [
+   0.5,
+   1
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   20,
+   30
+  ],
+  "calorFuerte": 35,
+  "siembra": "trasplante",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Prende",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 15
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 45
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Carga fruto",
+    "desde": 60
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 90
+   }
+  ],
+  "cosechaDias": 90,
+  "perenne": false,
+  "distancia": "50 cm entre matas y 80 cm entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "cilantro",
+   "cebollin",
+   "oregano"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Picudo",
+   "Mosca blanca",
+   "Ácaros"
+  ],
+  "senal": "El ají está firme, brillante y del tamaño de la variedad.",
+  "consejo": "Entre más se cosecha, más carga. No le des agua de más: se le pudre el cuello."
+ },
+ {
+  "id": "pimenton",
+  "nombre": "Pimentón",
+  "forma": "mata",
+  "fruto": "#d6453a",
+  "familia": "solanaceas",
+  "sed": 1,
+  "abrir": 30,
+  "cerrar": 42,
+  "kc": [
+   0.6,
+   1.05,
+   0.9
+  ],
+  "agotable": 0.3,
+  "raiz": [
+   0.5,
+   1
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   18,
+   28
+  ],
+  "calorFuerte": 34,
+  "siembra": "trasplante",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Prende",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 15
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 45
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Carga fruto",
+    "desde": 60
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 85
+   }
+  ],
+  "cosechaDias": 60,
+  "perenne": false,
+  "distancia": "45 cm entre matas y 80 cm entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "cilantro",
+   "cebollin",
+   "oregano"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Picudo",
+   "Mosca blanca",
+   "Quemazón del fruto por sol"
+  ],
+  "senal": "El fruto está grande, duro y brillante, verde o ya pintando.",
+  "consejo": "El sol directo le quema el fruto: agradece la polisombra al mediodía."
+ },
+ {
+  "id": "berenjena",
+  "nombre": "Berenjena",
+  "forma": "mata",
+  "fruto": "#6b3f7c",
+  "familia": "solanaceas",
+  "sed": 1,
+  "abrir": 30,
+  "cerrar": 42,
+  "kc": [
+   0.6,
+   1.05,
+   0.9
+  ],
+  "agotable": 0.45,
+  "raiz": [
+   0.7,
+   1.2
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   22,
+   32
+  ],
+  "calorFuerte": 35,
+  "siembra": "trasplante",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Prende",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 15
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 45
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Carga fruto",
+    "desde": 60
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 80
+   }
+  ],
+  "cosechaDias": 90,
+  "perenne": false,
+  "distancia": "60 cm entre matas y 1 m entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "habichuela",
+   "frijol",
+   "oregano"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Pulguilla",
+   "Mosca blanca",
+   "Ácaros"
+  ],
+  "senal": "La cáscara está brillante. Si se pone opaca, ya se pasó.",
+  "consejo": "Es de las que mejor aguanta el calor del Caribe. Córtala con tijera, no la jales."
+ },
+ {
+  "id": "cilantro",
+  "nombre": "Cilantro",
+  "forma": "hoja",
+  "fruto": null,
+  "familia": "apiaceas",
+  "sed": 1.1,
+  "abrir": 33,
+  "cerrar": 45,
+  "kc": [
+   0.7,
+   1,
+   0.95
+  ],
+  "agotable": 0.3,
+  "raiz": [
+   0.2,
+   0.4
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   15,
+   25
+  ],
+  "calorFuerte": 34,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Germina",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 10
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 38
+   }
+  ],
+  "cosechaDias": 12,
+  "perenne": false,
+  "distancia": "A chorrillo, surcos a 15 cm",
+  "luz": "media sombra",
+  "amigas": [
+   "tomate",
+   "aji",
+   "pimenton",
+   "col"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Pulgones",
+   "Pudrición por agua de más"
+  ],
+  "senal": "Tiene un palmo de alto y todavía no ha echado flor.",
+  "consejo": "Con calor se espiga rápido. Siémbralo cada tres semanas para que no falte."
+ },
+ {
+  "id": "lechuga",
+  "nombre": "Lechuga",
+  "forma": "hoja",
+  "fruto": null,
+  "familia": "asteraceas",
+  "sed": 1.15,
+  "abrir": 34,
+  "cerrar": 46,
+  "kc": [
+   0.7,
+   1,
+   0.95
+  ],
+  "agotable": 0.3,
+  "raiz": [
+   0.3,
+   0.5
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   15,
+   24
+  ],
+  "calorFuerte": 34,
+  "siembra": "trasplante",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Prende",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 12
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 50
+   }
+  ],
+  "cosechaDias": 10,
+  "perenne": false,
+  "distancia": "25 cm entre matas y 30 cm entre surcos",
+  "luz": "media sombra",
+  "amigas": [
+   "cebollin",
+   "pepino",
+   "tomate",
+   "col"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Babosas",
+   "Pulgones",
+   "Quemazón de la punta"
+  ],
+  "senal": "El cogollo está lleno y las hojas todavía tiernas.",
+  "consejo": "En tierra caliente pide polisombra y riego corto todos los días."
+ },
+ {
+  "id": "col",
+  "nombre": "Col",
+  "forma": "hoja",
+  "fruto": null,
+  "familia": "brasicaceas",
+  "sed": 1.05,
+  "abrir": 31,
+  "cerrar": 43,
+  "kc": [
+   0.7,
+   1.05,
+   0.95
+  ],
+  "agotable": 0.45,
+  "raiz": [
+   0.5,
+   0.8
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   15,
+   25
+  ],
+  "calorFuerte": 34,
+  "siembra": "trasplante",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Prende",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 15
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 85
+   }
+  ],
+  "cosechaDias": 20,
+  "perenne": false,
+  "distancia": "45 cm entre matas y 60 cm entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "cebollin",
+   "cilantro",
+   "oregano",
+   "habichuela"
+  ],
+  "evitar": [
+   "tomate"
+  ],
+  "plagas": [
+   "Gusano de la col",
+   "Pulgones"
+  ],
+  "senal": "Al apretarla con la mano, la cabeza se siente dura.",
+  "consejo": "Revisa el envés de las hojas cada semana: el gusano se quita a mano si se coge a tiempo."
+ },
+ {
+  "id": "cebollin",
+  "nombre": "Cebollín",
+  "forma": "hoja",
+  "fruto": null,
+  "familia": "aliaceas",
+  "sed": 0.95,
+  "abrir": 30,
+  "cerrar": 42,
+  "kc": [
+   0.7,
+   1,
+   1
+  ],
+  "agotable": 0.3,
+  "raiz": [
+   0.3,
+   0.6
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   18,
+   28
+  ],
+  "calorFuerte": 35,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Brota",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Macolla",
+    "desde": 15
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 65
+   }
+  ],
+  "cosechaDias": 120,
+  "perenne": true,
+  "distancia": "15 cm entre matas y 30 cm entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "tomate",
+   "lechuga",
+   "col",
+   "aji",
+   "pimenton"
+  ],
+  "evitar": [
+   "habichuela",
+   "frijol"
+  ],
+  "plagas": [
+   "Trips",
+   "Pudrición por agua de más"
+  ],
+  "senal": "Las hojas tienen el grueso de un lápiz.",
+  "consejo": "Corta y deja la cepa: vuelve a salir. Su olor espanta plagas de las vecinas."
+ },
+ {
+  "id": "oregano",
+  "nombre": "Orégano",
+  "forma": "hoja",
+  "fruto": null,
+  "familia": "lamiaceas",
+  "sed": 0.8,
+  "abrir": 26,
+  "cerrar": 38,
+  "kc": [
+   0.6,
+   1,
+   0.9
+  ],
+  "agotable": 0.4,
+  "raiz": [
+   0.3,
+   0.6
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   20,
+   32
+  ],
+  "calorFuerte": 36,
+  "siembra": "estaca",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Prende",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Cierra",
+    "desde": 20
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cortes",
+    "desde": 90
+   }
+  ],
+  "cosechaDias": 365,
+  "perenne": true,
+  "distancia": "30 cm entre matas y 40 cm entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "col",
+   "tomate",
+   "aji",
+   "pimenton",
+   "berenjena"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Casi ninguna"
+  ],
+  "senal": "Antes de florecer, cuando la rama está tupida y olorosa.",
+  "consejo": "Pide poca agua. Encharcado se muere antes que por sed."
+ },
+ {
+  "id": "habichuela",
+  "nombre": "Habichuela",
+  "forma": "enredadera",
+  "fruto": "#f6f1c9",
+  "familia": "leguminosas",
+  "sed": 1,
+  "abrir": 30,
+  "cerrar": 42,
+  "kc": [
+   0.5,
+   1.05,
+   0.9
+  ],
+  "agotable": 0.45,
+  "raiz": [
+   0.5,
+   0.7
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   18,
+   28
+  ],
+  "calorFuerte": 34,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Germina",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Enreda",
+    "desde": 10
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 35
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Echa vaina",
+    "desde": 42
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 55
+   }
+  ],
+  "cosechaDias": 30,
+  "perenne": false,
+  "distancia": "30 cm entre matas, con tutor o enramada",
+  "luz": "sol",
+  "amigas": [
+   "maiz",
+   "pepino",
+   "col",
+   "berenjena",
+   "ahuyama"
+  ],
+  "evitar": [
+   "cebollin"
+  ],
+  "plagas": [
+   "Mosca blanca",
+   "Cucarroncitos de la hoja",
+   "Roya"
+  ],
+  "senal": "La vaina está larga y tierna, y truena al partirla.",
+  "consejo": "Deja nitrógeno en la tierra: después de ella siembra una hoja o un tomate."
+ },
+ {
+  "id": "pepino",
+  "nombre": "Pepino",
+  "forma": "enredadera",
+  "fruto": "#f6bd29",
+  "familia": "cucurbitaceas",
+  "sed": 1.1,
+  "abrir": 31,
+  "cerrar": 43,
+  "kc": [
+   0.6,
+   1,
+   0.75
+  ],
+  "agotable": 0.5,
+  "raiz": [
+   0.7,
+   1.2
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   20,
+   30
+  ],
+  "calorFuerte": 35,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Germina",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Echa bejuco",
+    "desde": 10
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 28
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Carga fruto",
+    "desde": 36
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 48
+   }
+  ],
+  "cosechaDias": 30,
+  "perenne": false,
+  "distancia": "40 cm entre matas, con tutor",
+  "luz": "sol",
+  "amigas": [
+   "maiz",
+   "habichuela",
+   "frijol",
+   "lechuga",
+   "cebollin"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Gusano perforador",
+   "Mildeo",
+   "Mosca blanca"
+  ],
+  "senal": "Verde parejo y firme, antes de que amarillee.",
+  "consejo": "Necesita abejas: no fumigues cuando está en flor."
+ },
+ {
+  "id": "frijol",
+  "nombre": "Fríjol",
+  "forma": "enredadera",
+  "fruto": "#f1d7e6",
+  "familia": "leguminosas",
+  "sed": 0.9,
+  "abrir": 29,
+  "cerrar": 41,
+  "kc": [
+   0.4,
+   1.15,
+   0.35
+  ],
+  "agotable": 0.45,
+  "raiz": [
+   0.6,
+   0.9
+  ],
+  "secarAlFinal": true,
+  "optimo": [
+   18,
+   28
+  ],
+  "calorFuerte": 34,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Germina",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 10
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 38
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Llena vaina",
+    "desde": 48
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 80
+   }
+  ],
+  "cosechaDias": 0,
+  "perenne": false,
+  "distancia": "20 cm entre matas y 50 cm entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "maiz",
+   "ahuyama",
+   "yuca",
+   "berenjena",
+   "pepino"
+  ],
+  "evitar": [
+   "cebollin"
+  ],
+  "plagas": [
+   "Mosca blanca",
+   "Cucarroncitos de la hoja",
+   "Roya"
+  ],
+  "senal": "La vaina se pone amarilla y suena el grano.",
+  "consejo": "Con mucho calor bota la flor. Cuando la vaina amarillee, suspende el riego."
+ },
+ {
+  "id": "ahuyama",
+  "nombre": "Ahuyama",
+  "forma": "rastrera",
+  "fruto": "#e8a414",
+  "familia": "cucurbitaceas",
+  "sed": 0.9,
+  "abrir": 28,
+  "cerrar": 40,
+  "kc": [
+   0.5,
+   1,
+   0.8
+  ],
+  "agotable": 0.35,
+  "raiz": [
+   1,
+   1.5
+  ],
+  "secarAlFinal": true,
+  "optimo": [
+   20,
+   32
+  ],
+  "calorFuerte": 36,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Germina",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Echa guía",
+    "desde": 12
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 40
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Engruesa",
+    "desde": 55
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 110
+   }
+  ],
+  "cosechaDias": 0,
+  "perenne": false,
+  "distancia": "2 m entre matas: la guía camina",
+  "luz": "sol",
+  "amigas": [
+   "maiz",
+   "frijol",
+   "habichuela",
+   "yuca"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Gusano perforador",
+   "Mildeo",
+   "Mosca blanca"
+  ],
+  "senal": "El pezón se seca y la cáscara no se deja marcar con la uña.",
+  "consejo": "Sus hojas tapan la tierra y le guardan la humedad a las vecinas."
+ },
+ {
+  "id": "patilla",
+  "nombre": "Patilla",
+  "forma": "rastrera",
+  "fruto": "#2a9a55",
+  "familia": "cucurbitaceas",
+  "sed": 0.9,
+  "abrir": 27,
+  "cerrar": 39,
+  "kc": [
+   0.4,
+   1,
+   0.75
+  ],
+  "agotable": 0.4,
+  "raiz": [
+   0.8,
+   1.5
+  ],
+  "secarAlFinal": true,
+  "optimo": [
+   22,
+   32
+  ],
+  "calorFuerte": 37,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Germina",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Echa guía",
+    "desde": 12
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 35
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Engruesa",
+    "desde": 48
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 80
+   }
+  ],
+  "cosechaDias": 0,
+  "perenne": false,
+  "distancia": "1,5 m entre matas y 2 m entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "maiz"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Gusano perforador",
+   "Mildeo",
+   "Pulgones"
+  ],
+  "senal": "El zarcillo junto al fruto se seca y la barriga se pone amarilla.",
+  "consejo": "Bájale el agua las dos últimas semanas: queda más dulce."
+ },
+ {
+  "id": "melon",
+  "nombre": "Melón",
+  "forma": "rastrera",
+  "fruto": "#d9c26a",
+  "familia": "cucurbitaceas",
+  "sed": 0.9,
+  "abrir": 27,
+  "cerrar": 39,
+  "kc": [
+   0.5,
+   1.05,
+   0.75
+  ],
+  "agotable": 0.4,
+  "raiz": [
+   0.8,
+   1.5
+  ],
+  "secarAlFinal": true,
+  "optimo": [
+   22,
+   32
+  ],
+  "calorFuerte": 37,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Germina",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Echa guía",
+    "desde": 12
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Florece",
+    "desde": 32
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Engruesa",
+    "desde": 45
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 75
+   }
+  ],
+  "cosechaDias": 0,
+  "perenne": false,
+  "distancia": "1 m entre matas y 1,8 m entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "maiz"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Gusano perforador",
+   "Mildeo",
+   "Mosca blanca"
+  ],
+  "senal": "Huele dulce y se desprende fácil del pezón.",
+  "consejo": "Con riego parejo no se raja. Al final, menos agua y más sabor."
+ },
+ {
+  "id": "maiz",
+  "nombre": "Maíz",
+  "forma": "alta",
+  "fruto": "#f6bd29",
+  "familia": "gramineas",
+  "sed": 1,
+  "abrir": 29,
+  "cerrar": 41,
+  "kc": [
+   0.3,
+   1.2,
+   0.6
+  ],
+  "agotable": 0.55,
+  "raiz": [
+   1,
+   1.7
+  ],
+  "secarAlFinal": true,
+  "optimo": [
+   18,
+   33
+  ],
+  "calorFuerte": 36,
+  "siembra": "directa",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Germina",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 10
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Espiga",
+    "desde": 50
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Llena mazorca",
+    "desde": 60
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 85
+   }
+  ],
+  "cosechaDias": 0,
+  "perenne": false,
+  "distancia": "30 cm entre matas y 80 cm entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "frijol",
+   "habichuela",
+   "ahuyama",
+   "pepino",
+   "patilla",
+   "melon"
+  ],
+  "evitar": [
+   "tomate"
+  ],
+  "plagas": [
+   "Gusano cogollero"
+  ],
+  "senal": "Para choclo, los pelos se secan y el grano bota leche.",
+  "consejo": "Cuando espiga no le puede faltar agua: de ahí depende la mazorca."
+ },
+ {
+  "id": "yuca",
+  "nombre": "Yuca",
+  "forma": "alta",
+  "fruto": null,
+  "familia": "euforbiaceas",
+  "sed": 0.7,
+  "abrir": 24,
+  "cerrar": 36,
+  "kc": [
+   0.3,
+   0.8,
+   0.3
+  ],
+  "agotable": 0.35,
+  "raiz": [
+   0.5,
+   0.8
+  ],
+  "secarAlFinal": true,
+  "optimo": [
+   20,
+   29
+  ],
+  "calorFuerte": 37,
+  "siembra": "estaca",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Brota",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 30
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Engruesa",
+    "desde": 120
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 270
+   }
+  ],
+  "cosechaDias": 60,
+  "perenne": false,
+  "distancia": "1 m entre matas y 1 m entre surcos",
+  "luz": "sol",
+  "amigas": [
+   "frijol",
+   "maiz",
+   "ahuyama"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Gusano cachón",
+   "Ácaros",
+   "Mosca blanca"
+  ],
+  "senal": "Entre 8 y 10 meses, cuando empieza a botar la hoja de abajo.",
+  "consejo": "Aguanta la sequía. Con la tierra encharcada se le pudre la raíz."
+ },
+ {
+  "id": "platano",
+  "nombre": "Plátano",
+  "forma": "alta",
+  "fruto": null,
+  "familia": "musaceas",
+  "sed": 1.2,
+  "abrir": 32,
+  "cerrar": 44,
+  "kc": [
+   0.5,
+   1.1,
+   1
+  ],
+  "agotable": 0.35,
+  "raiz": [
+   0.5,
+   0.9
+  ],
+  "secarAlFinal": false,
+  "optimo": [
+   22,
+   32
+  ],
+  "calorFuerte": 37,
+  "siembra": "colino",
+  "etapas": [
+   {
+    "tipo": "inicio",
+    "nombre": "Prende",
+    "desde": 0
+   },
+   {
+    "tipo": "crecimiento",
+    "nombre": "Crece",
+    "desde": 30
+   },
+   {
+    "tipo": "flor",
+    "nombre": "Pare (bellota)",
+    "desde": 210
+   },
+   {
+    "tipo": "fruto",
+    "nombre": "Llena racimo",
+    "desde": 225
+   },
+   {
+    "tipo": "cosecha",
+    "nombre": "Cosecha",
+    "desde": 300
+   }
+  ],
+  "cosechaDias": 30,
+  "perenne": true,
+  "distancia": "3 m entre matas",
+  "luz": "sol",
+  "amigas": [
+   "yuca",
+   "frijol",
+   "ahuyama"
+  ],
+  "evitar": [],
+  "plagas": [
+   "Sigatoka",
+   "Picudo negro"
+  ],
+  "senal": "El dedo pierde las aristas y se ve lleno.",
+  "consejo": "Deshija: deja madre, hija y nieta. Es de los que más agua pide."
+ }
+]

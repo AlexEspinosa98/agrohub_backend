@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "apps.riego_cambios",
     "apps.cartillas",
     "apps.blogs",
+    "apps.huertas",
     "apps.riego_iot",
 ]
 
@@ -228,6 +229,14 @@ ASISTENCIA_OPENAI_MODEL = os.getenv("ASISTENCIA_OPENAI_MODEL", "gpt-4o")
 ASISTENCIA_OPENAI_URL = os.getenv("ASISTENCIA_OPENAI_URL", "https://api.openai.com/v1/chat/completions")
 ASISTENCIA_OPENAI_PARALELISMO = int(os.getenv("ASISTENCIA_OPENAI_PARALELISMO", "4"))
 ASISTENCIA_OPENAI_TIMEOUT = int(os.getenv("ASISTENCIA_OPENAI_TIMEOUT", "180"))
+
+# Huertas abiertas (apps.huertas). Mandar al gateway los umbrales que salen del plan de siembra es
+# tocar equipo real en campo: apagado por defecto hasta que el equipo técnico lo active.
+HUERTAS_ENVIAR_UMBRALES = os.getenv("HUERTAS_ENVIAR_UMBRALES", "false").lower() in ("1", "true", "si", "sí", "yes")
+# Seguimiento con modelo de lenguaje: proveedor "openai" o "gemini" (vacío = openai si hay llave).
+HUERTAS_LLM_PROVEEDOR = os.getenv("HUERTAS_LLM_PROVEEDOR", "")
+HUERTAS_LLM_MODELO = os.getenv("HUERTAS_LLM_MODELO", "")
+HUERTAS_LLM_TOPE_USD_MES = float(os.getenv("HUERTAS_LLM_TOPE_USD_MES", "5"))
 
 LOGGING = {
     "version": 1,

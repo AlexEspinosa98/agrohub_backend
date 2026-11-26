@@ -6,7 +6,7 @@ rutas reales del código y los conteos de la base de producción (11 oct 2026).
 Base: Django + DRF · MySQL `agrohub_v2` (+ Postgres `agrohub_mqtt` solo para riego) · `/api/agrohub/`.
 Auth: `Authorization: Token <token>` (tabla `Session`). Roles hoy: `user`, `admin`, `superadmin`.
 
-## 1. Resumen: 9 módulos
+## 1. Resumen: 10 módulos
 
 | # | Módulo (app) | Qué hace | Datos en producción | Acceso hoy |
 |---|---|---|---|---|
@@ -19,6 +19,7 @@ Auth: `Authorization: Token <token>` (tabla `Session`). Roles hoy: `user`, `admi
 | 7 | `riego_iot` | gateways de riego y lecturas (lee la BD de `mqtt_agrohub`) | 16 dispositivos · ~4.8 mil lecturas de suelo y ambiente | admin, superadmin e investigador (ver `HU_RIEGO_IOT.md`) |
 | 8 | `cartillas` | biblioteca pública de cartillas en PDF con índice y búsqueda (ver `HU_CARTILLAS.md`) | 0 al crearse | lectura **pública**; escritura admin, superadmin, investigador y comunicaciones |
 | 9 | `blogs` | entradas de blog con portada, etiquetas, borradores y programación (ver `HU_BLOGS.md`) | 0 al crearse | lectura **pública** de lo publicado; escritura admin, superadmin, investigador y comunicaciones |
+| 10 | `huertas` | huertas abiertas: biblioteca de cultivos, plan de siembra por cama, lecturas abiertas por cama, reportes de la comunidad, seguimiento con modelo de lenguaje y cuidadores por AgroHub (ver `API_HUERTAS_ABIERTAS.md`) | 18 cultivos al crearse | lectura **pública**; plan y riego para cuidadores del AgroHub; configuración técnica para admin, superadmin e investigador |
 
 Servicios de apoyo en el servidor: `agrohub-ocr-llm` (modelo de visión local para el OCR de
 asistencia). Otros sistemas fuera de este backend: `mqtt_agrohub` (ingesta MQTT/IoT) y el AgroHub

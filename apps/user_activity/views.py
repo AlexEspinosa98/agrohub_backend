@@ -150,7 +150,13 @@ def _serialize_logbook(l: Logbook, association_name=None) -> dict:
         "title": l.title,
         "description": l.description,
         "activity_date": l.activity_date,
+        "activity_type": l.activity_type,
+        "moon_phase": l.moon_phase,
+        "agrohub_id": l.agrohub_id,
+        "publica": l.publica,
+        "user_id": l.user_id,
         "created_at": l.created_at,
+        "updated_at": l.updated_at,
         "association_name": association_name,
     }
 
@@ -191,7 +197,10 @@ def _role_item_fields():
 def _logbook_item_fields():
     return {
         "id": serializers.IntegerField(), "title": serializers.CharField(), "description": serializers.CharField(),
-        "activity_date": serializers.DateField(), "created_at": serializers.DateTimeField(),
+        "activity_date": serializers.DateField(), "activity_type": serializers.CharField(allow_null=True),
+        "moon_phase": serializers.CharField(allow_null=True), "agrohub_id": serializers.IntegerField(allow_null=True),
+        "publica": serializers.BooleanField(), "user_id": serializers.IntegerField(),
+        "created_at": serializers.DateTimeField(), "updated_at": serializers.DateTimeField(allow_null=True),
         "association_name": serializers.CharField(allow_null=True),
     }
 
@@ -758,15 +767,28 @@ def create_logbook(request):
     serializer = LogbookCreateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     data = serializer.validated_data
-    Logbook.objects.create(
+    agrohub = None
+    if data.get("agrohub_id"):
+        from apps.agrohubs.models import AgroHub
+        from apps.huertas.permisos import exigir_cuidar
+
+        agrohub = AgroHub.objects.filter(id=data["agrohub_id"]).first()
+        if not agrohub:
+            raise NotFound("AgroHub no encontrado")
+        exigir_cuidar(request.user, agrohub)
+    logbook = Logbook.objects.create(
         user=request.user,
         association=None,
         title=data["title"],
         description=data["description"],
         activity_date=data["activity_date"],
+        activity_type=data.get("activity_type") or None,
+        moon_phase=data.get("moon_phase") or None,
+        agrohub=agrohub,
+        publica=data.get("publica", True),
     )
     return Response(
-        {"status": status.HTTP_201_CREATED, "message": "bitácora creada", "data": None},
+        {"status": status.HTTP_201_CREATED, "message": "bitácora creada", "data": _serialize_logbook(logbook)},
         status=status.HTTP_201_CREATED,
     )
 
@@ -807,7 +829,12 @@ def logbook_detail(request, logbook_id: int):
 
     serializer = LogbookUpdateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    data = {k: v for k, v in serializer.validated_data.items() if v is not None}
+    anulables = {"activity_type", "moon_phase"}
+    data = {
+        k: (v or None if k in anulables else v)
+        for k, v in serializer.validated_data.items()
+        if v is not None or k in anulables
+    }
     if not data:
         raise ParseError("Nada para actualizar")
     for key, value in data.items():

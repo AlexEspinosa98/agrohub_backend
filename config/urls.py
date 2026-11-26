@@ -4,6 +4,8 @@ from django.urls import include, path
 from apps.agrohubs.views import agrohubs_list_create
 from apps.blogs.views import BlogsView
 from apps.cartillas.views import CartillasView
+from apps.huertas import views as huertas_views
+from apps.huertas.urls import cultivos_urlpatterns
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 
@@ -29,7 +31,11 @@ urlpatterns = [
     path("agrohubs", agrohubs_list_create),
     path("cartillas", CartillasView.as_view()),
     path("blogs", BlogsView.as_view()),
+    path("cultivos", huertas_views.cultivos),
     path("agrohubs/", include("apps.agrohubs.urls")),
+    # Huertas abiertas (gemelo de la huerta): /agrohubs/<id|número>/plan, /lecturas, /reportes…
+    path("agrohubs/", include("apps.huertas.urls")),
+    path("cultivos/", include(cultivos_urlpatterns)),
     path("cartillas/", include("apps.cartillas.urls")),
     path("blogs/", include("apps.blogs.urls")),
     path("riego-iot/", include("apps.riego_iot.urls")),

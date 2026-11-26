@@ -86,10 +86,18 @@ class RoleAssignSerializer(serializers.Serializer):
     role = serializers.CharField()
 
 
+ACTIVITY_TYPES = ["siembra", "cosecha", "riego", "fumigacion", "abono", "poda", "otro"]
+
+
 class LogbookCreateSerializer(serializers.Serializer):
     title = serializers.CharField()
     description = serializers.CharField()
     activity_date = serializers.DateField()
+    activity_type = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=30)
+    moon_phase = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=40)
+    # Huertas abiertas: escribir en la bitácora de un AgroHub (requiere cuidarlo o ser del equipo).
+    agrohub_id = serializers.IntegerField(required=False, allow_null=True)
+    publica = serializers.BooleanField(required=False, default=True)
 
 
 class LogbookUpdateSerializer(serializers.Serializer):
@@ -97,6 +105,9 @@ class LogbookUpdateSerializer(serializers.Serializer):
     description = serializers.CharField(required=False)
     activity_date = serializers.DateField(required=False)
     association_id = serializers.IntegerField(required=False, allow_null=True)
+    activity_type = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=30)
+    moon_phase = serializers.CharField(required=False, allow_null=True, allow_blank=True, max_length=40)
+    publica = serializers.BooleanField(required=False)
 
 
 class ChatRequestSerializer(serializers.Serializer):
