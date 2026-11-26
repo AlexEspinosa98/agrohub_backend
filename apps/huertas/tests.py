@@ -468,6 +468,10 @@ class ResumenTests(BaseHuertas):
         self.assertEqual(len(d["plan"]["camas"]), 3)
         self.assertIn("recomendaciones", d)
         self.assertFalse(d["permisos"]["cambiar_plan"])
+        todas = self.anonimo().get("/agrohubs/huertas").json()["data"]
+        self.assertEqual([h["numero"] for h in todas], ["AH-002", "AH-003"])
+        self.assertEqual(len(todas[0]["camas"]), 3)
+        self.assertNotIn("tecnico", todas[0]["camas"][0])
         # Las rutas del geovisor siguen funcionando.
         self.assertEqual(self.anonimo().get("/agrohubs/puntos").status_code, 200)
         self.assertEqual(self.anonimo().get(f"/agrohubs/{self.agrohub.id}").status_code, 200)

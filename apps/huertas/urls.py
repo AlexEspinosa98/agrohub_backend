@@ -4,6 +4,7 @@ from django.urls import path
 from apps.huertas import views
 
 urlpatterns = [
+    path("huertas", views.huertas_todas, name="huertas_todas"),
     path("<str:ref>/huerta", views.agrohub_huerta, name="huertas_huerta"),
     path("<str:ref>/permisos", views.agrohub_permisos, name="huertas_permisos"),
     path("<str:ref>/cuidadores", views.cuidadores, name="huertas_cuidadores"),

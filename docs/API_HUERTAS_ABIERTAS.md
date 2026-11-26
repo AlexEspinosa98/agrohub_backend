@@ -28,6 +28,7 @@ el selector «Solo mirar / Cuido esta huerta» (HF03).
 
 | Método y ruta | Acceso | Para qué (HU) |
 |---|---|---|
+| `GET /agrohubs/huertas` | público | Todas las huertas con sus camas (mapa y boletín) |
 | `GET /agrohubs/<ref>/huerta` | público | Todo en una llamada: agrohub, permisos, plan, reportes, movimientos, recomendaciones, seguimiento |
 | `GET /cultivos/` · `GET /cultivos/<id>` | público | Biblioteca (HB01) |
 | `POST /cultivos/` · `PUT/PATCH /cultivos/<id>` · `GET /cultivos/<id>/cambios` | equipo | Editar la biblioteca con registro de cambios |

@@ -703,6 +703,37 @@ def agrohub_seguimiento(request, ref):
     }, status.HTTP_201_CREATED if nuevo else status.HTTP_200_OK)
 
 
+# ======================================================================== Todas las huertas
+
+
+def _agrohub_publico(a):
+    return {
+        "id": a.id, "numero": a.numero, "slug": a.numero.lower(), "nombre": a.nombre,
+        "municipio": a.municipio, "vereda": a.vereda, "comunidad": a.comunidad,
+        "posicion": [float(a.latitud), float(a.longitud)], "con_sensores": bool(a.dispositivo),
+    }
+
+
+@_doc("Todas las huertas con su plan (público)", "Para el mapa y el boletín: cada AgroHub con sus camas, en una sola llamada.")
+@api_view(["GET"])
+@authentication_classes([])
+@permission_classes(_ABIERTO)
+@throttle_classes([LecturaPublicaThrottle])
+def huertas_todas(request):
+    agrohubs = list(AgroHub.objects.prefetch_related("camas__historial").order_by("numero"))
+    fichas = plan.fichas_por_id()
+    datos = [
+        {
+            **_agrohub_publico(a),
+            "camas": [plan.cama_dict(c, fichas, list(c.historial.all()[:4])) for c in a.camas.all()],
+        }
+        for a in agrohubs
+    ]
+    resp = _ok("huertas", datos)
+    resp["Cache-Control"] = "public, max-age=60"
+    return resp
+
+
 # ======================================================================== Resumen de la huerta
 
 
@@ -719,11 +750,7 @@ def agrohub_huerta(request, ref):
     reportes = list(Reporte.objects.filter(agrohub=a, moderacion="visible").select_related("cama")[:30])
     est = seguimiento.estado(a)
     return _ok("huerta", {
-        "agrohub": {
-            "id": a.id, "numero": a.numero, "slug": a.numero.lower(), "nombre": a.nombre,
-            "municipio": a.municipio, "vereda": a.vereda, "comunidad": a.comunidad,
-            "posicion": [float(a.latitud), float(a.longitud)], "con_sensores": bool(a.dispositivo),
-        },
+        "agrohub": _agrohub_publico(a),
         "permisos": permisos.permisos(request.user, a),
         "plan": plan.plan_dict(a, equipo=equipo),
         "reportes": [_reporte_dict(r) for r in reportes],
