@@ -127,4 +127,12 @@ class ModeracionSerializer(serializers.Serializer):
 
 
 class CuidadorSerializer(serializers.Serializer):
-    usuario_id = serializers.IntegerField()
+    """La persona se indica por id o por su teléfono, cédula o correo (con lo que inicia sesión)."""
+
+    usuario_id = serializers.IntegerField(required=False)
+    identificador = serializers.CharField(required=False, max_length=150)
+
+    def validate(self, data):
+        if not data.get("usuario_id") and not (data.get("identificador") or "").strip():
+            raise serializers.ValidationError({"identificador": "Escribe el teléfono, la cédula o el correo de la persona."})
+        return data

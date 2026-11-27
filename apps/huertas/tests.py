@@ -138,6 +138,11 @@ class PermisosTests(BaseHuertas):
         self.assertEqual(r.status_code, 201)
         self.assertTrue(self.como(self.vecino).get("/agrohubs/AH-003/permisos").json()["data"]["cambiar_plan"])
         self.assertEqual(self.como(self.admin).delete(f"/agrohubs/AH-003/cuidadores/{self.vecino.id}").status_code, 200)
+        # También por teléfono o cédula (el panel no ve la lista de usuarios)
+        r = self.como(self.admin).post("/agrohubs/AH-003/cuidadores", {"identificador": self.vecino.phone}, format="json")
+        self.assertEqual(r.json()["data"][0]["usuario_id"], self.vecino.id)
+        r = self.como(self.admin).post("/agrohubs/AH-003/cuidadores", {"identificador": "000"}, format="json")
+        self.assertEqual(r.status_code, 422)
 
 
 class PlanTests(BaseHuertas):

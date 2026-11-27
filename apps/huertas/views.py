@@ -249,9 +249,14 @@ def cuidadores(request, ref):
 
         s = CuidadorSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        u = User.objects.filter(id=s.validated_data["usuario_id"]).first()
+        if s.validated_data.get("usuario_id"):
+            u = User.objects.filter(id=s.validated_data["usuario_id"]).first()
+        else:
+            from apps.user_activity.views import _find_user_by_login
+
+            u = _find_user_by_login(s.validated_data["identificador"].strip())
         if not u:
-            raise ValidationError({"usuario_id": "No existe ese usuario."})
+            raise ValidationError({"identificador": "No hay una cuenta con ese teléfono, cédula o correo."})
         Cuidador.objects.get_or_create(agrohub=a, usuario=u, defaults={"asignado_por": request.user})
     datos = [
         {"usuario_id": c.usuario_id, "nombre": c.usuario.name, "telefono": c.usuario.phone, "asignado_en": c.creado_en}
