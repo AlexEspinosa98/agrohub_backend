@@ -57,6 +57,7 @@ def cama_dict(cama, fichas, historial=None, equipo=False, dia=None):
     data = {
         "zona": cama.zona,
         "orden": cama.orden,
+        "referencia": cama.origen == "referencia",
         "libre": ficha is None,
         "cultivo_id": cama.cultivo_id,
         "cultivo_nombre": ficha["nombre"] if ficha else None,
@@ -213,6 +214,8 @@ def cambiar_cama(agrohub, cama, cambios, usuario):
                 usuario, antes=antes, ahora=valor,
             ))
 
+    if movimientos:
+        cama.origen = "equipo"  # una persona confirmó el plan de esta cama
     cama.save()
     return cama, movimientos
 
@@ -226,6 +229,7 @@ def intercambiar(agrohub, zona_a, zona_b, usuario):
     if len(camas) != 2:
         raise ValidationError({"zonas": "Alguna de las camas no existe en esta huerta."})
     a, b = camas[zona_a], camas[zona_b]
+    a.origen = b.origen = "equipo"
     a.cultivo_id, b.cultivo_id = b.cultivo_id, a.cultivo_id
     a.sembrado_el, b.sembrado_el = b.sembrado_el, a.sembrado_el
     a.cosechando, b.cosechando = b.cosechando, a.cosechando

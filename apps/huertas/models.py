@@ -154,6 +154,10 @@ class Cama(models.Model):
     valvula = models.CharField(max_length=5, null=True, blank=True)  # "RO1" | "RO2"
     sensor = models.CharField(max_length=32, null=True, blank=True)  # dev_eui de la sonda
 
+    # «referencia»: la creó el sistema con lo que el micrositio dice que se siembra y una sonda
+    # del gateway, para que la huerta no salga vacía. Pasa a «equipo» apenas una persona cambia
+    # el plan o la configuración: desde ahí es dato confirmado.
+    origen = models.CharField(max_length=12, default="equipo")
     cultivo = models.ForeignKey(Cultivo, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
     sembrado_el = models.DateField(null=True, blank=True)
     cosechando = models.BooleanField(default=False)

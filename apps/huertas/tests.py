@@ -462,6 +462,35 @@ class SeguimientoTests(BaseHuertas):
         llamar.assert_not_called()
 
 
+class CamasPorDefectoTests(BaseHuertas):
+    def test_crea_camas_de_referencia_y_se_confirman_al_editar(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        from apps.riego_iot.models import LecturaSuelo
+
+        for dev, equipo in (("s2", "SE01-02"), ("s1", "SE01-01")):
+            LecturaSuelo.objects.using("mqtt").create(
+                device_id="device0014", dev_eui=dev, medido_en=_dt(30), humedad_suelo=25,
+                recibido_en=_dt(30), payload_crudo={"equipo": equipo},
+            )
+        call_command("huertas_camas_por_defecto", stdout=StringIO())  # vista previa: no crea
+        self.assertFalse(Cama.objects.exists())
+        call_command("huertas_camas_por_defecto", "--aplicar", stdout=StringIO())
+        camas = list(Cama.objects.filter(agrohub=self.agrohub).order_by("orden"))
+        self.assertEqual([(c.zona, c.cultivo_id, c.sensor) for c in camas], [("A", "aji", "s1"), ("B", "yuca", "s2")])
+        self.assertTrue(all(c.origen == "referencia" and not c.valvula for c in camas))
+        # AH-003 sin gateway: camas del micrositio sin sonda
+        self.assertEqual(Cama.objects.filter(agrohub=self.otro, sensor__isnull=True).count(), 4)
+        plan = self.anonimo().get("/agrohubs/AH-002/plan").json()["data"]
+        self.assertTrue(plan["camas"][0]["referencia"])
+        self.como(self.cuidadora).put("/agrohubs/AH-002/plan/camas/A", {"cosechando": True}, format="json")
+        self.assertFalse(self.anonimo().get("/agrohubs/AH-002/plan").json()["data"]["camas"][0]["referencia"])
+        call_command("huertas_camas_por_defecto", "--borrar", stdout=StringIO())
+        self.assertEqual(list(Cama.objects.filter(agrohub=self.agrohub).values_list("zona", flat=True)), ["A"])
+
+
 class ResumenTests(BaseHuertas):
     def test_huerta_en_una_llamada(self):
         self.camas()

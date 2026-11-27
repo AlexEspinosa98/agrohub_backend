@@ -335,6 +335,8 @@ def cama_config(request, ref, zona):
         setattr(c, k, v)
     if "gateway_zona" in d or "valvula" in d:
         c.umbral_abrir = c.umbral_cerrar = c.envio_resultado = None
+    if d:
+        c.origen = "equipo"
     c.save()
     return _ok("cama actualizada", plan.plan_dict(a, equipo=True))
 
