@@ -7,8 +7,13 @@ cambiar una función:
     {t, temperatura, humedadAire, temperaturaSuelo, enLinea, eras: [{zona, humedad, riego, auto}]}
 
 Reglas:
-- Sin datos se responde sin datos: un paso sin ninguna lectura sale con `enLinea: false` y los
-  valores en null. No se rellenan huecos ni se interpola.
+- Zona rural: los gateways mandan a ratos (se saltan pasos o suben tarde lo que guardaron). Si la
+  estación mandó datos hace menos de `HUERTAS_TOLERANCIA_MINUTOS` (3 h por defecto), un paso sin
+  lectura repite el ÚLTIMO valor medido, sale `enLinea: true` y se marca `relleno: true` con
+  `minutosSinDato`: no es una medición nueva y el cliente lo puede decir. Nunca se interpola ni
+  se inventa un valor que no se haya medido.
+- Pasada la tolerancia, sin datos se responde sin datos: `enLinea: false` y los valores en null.
+- `ultimoDatoReal` (ms) dice cuándo llegó de verdad la última medición.
 - `riego` es true si la válvula de esa cama estuvo abierta en algún momento del paso.
 - `auto` es el modo automático de la zona del gateway según el último health conocido.
 - Nunca salen device_id, dev_eui, temas MQTT ni credenciales.
@@ -81,10 +86,47 @@ def _escalon(eventos, pasos, inicial=None):
     return salida
 
 
+def _tolerancia_pasos():
+    from django.conf import settings
+
+    minutos = int(getattr(settings, "HUERTAS_TOLERANCIA_MINUTOS", 180) or 0)
+    return max(0, minutos * 60 // PASO_S)
+
+
+def _rellenar(lecturas, tolerancia):
+    """Repite el último valor medido en los pasos sin lectura, hasta `tolerancia` pasos."""
+    ultimo = {}  # campo -> (valor, índice del paso donde se midió)
+    ultimo_real = None
+    for i, l in enumerate(lecturas):
+        campos = [("temperatura", l), ("humedadAire", l), ("temperaturaSuelo", l)]
+        campos += [("humedad", e) for e in l["eras"]]
+        real = any(d[c] is not None for c, d in campos)
+        if real:
+            ultimo_real = i
+        relleno = False
+        for campo, d in campos:
+            clave = (campo, d.get("zona"))
+            if d[campo] is not None:
+                ultimo[clave] = (d[campo], i)
+            elif clave in ultimo and i - ultimo[clave][1] <= tolerancia:
+                d[campo] = ultimo[clave][0]
+                relleno = True
+        if not l["enLinea"] and ultimo_real is not None and i - ultimo_real <= tolerancia and (relleno or real):
+            l["enLinea"] = True
+        l["relleno"] = relleno
+        l["minutosSinDato"] = (i - ultimo_real) * PASO_S // 60 if ultimo_real is not None else None
+    return lecturas
+
+
 def lecturas_de(agrohub, camas, desde=None, hasta=None):
     """Lecturas agregadas de la huerta. `camas` es la lista de Cama en el orden en que se pintan."""
     desde, hasta = _ventana(desde, hasta)
     pasos = _pasos(desde, hasta)
+    tolerancia = _tolerancia_pasos()
+    # Se lee también lo de antes de la ventana (la tolerancia) para poder repetir el último valor
+    # en sus primeros pasos; esos pasos previos no se devuelven.
+    pasos_lectura = list(range(pasos[0] - tolerancia, pasos[0])) + pasos if pasos else pasos
+    desde_lectura = datetime.fromtimestamp(pasos_lectura[0] * PASO_S, timezone.utc) if pasos else desde
     base = {
         "paso_minutos": PASO_S // 60,
         "desde": datetime.fromtimestamp(pasos[0] * PASO_S, timezone.utc) if pasos else desde,
@@ -104,7 +146,7 @@ def lecturas_de(agrohub, camas, desde=None, hasta=None):
     device = agrohub.dispositivo
     vendor = connections[DB].vendor
     b = _bucket_sql(vendor)
-    rango = [device, desde, hasta]
+    rango = [device, desde_lectura, hasta]
 
     ambiente = {
         fila[0]: fila[1:]
@@ -133,7 +175,7 @@ def lecturas_de(agrohub, camas, desde=None, hasta=None):
     eventos_valvula = {}
     for medido, ro1, ro2, zona in (
         EstadoValvula.objects.using(DB)
-        .filter(device_id=device, medido_en__gte=desde - timedelta(days=1), medido_en__lt=hasta)
+        .filter(device_id=device, medido_en__gte=desde_lectura - timedelta(days=1), medido_en__lt=hasta)
         .order_by("medido_en")
         .values_list("medido_en", "ro1", "ro2", "payload_crudo__zona")
     ):
@@ -144,7 +186,7 @@ def lecturas_de(agrohub, camas, desde=None, hasta=None):
     eventos_auto = {}
     for medido, zonas_auto in (
         Healthcheck.objects.using(DB)
-        .filter(device_id=device, medido_en__gte=desde - timedelta(hours=6), medido_en__lt=hasta)
+        .filter(device_id=device, medido_en__gte=desde_lectura - timedelta(hours=6), medido_en__lt=hasta)
         .order_by("medido_en")
         .values_list("medido_en", "payload_crudo__zonas_auto")
     ):
@@ -153,12 +195,12 @@ def lecturas_de(agrohub, camas, desde=None, hasta=None):
 
     por_cama = []
     for c in camas:
-        valv = _escalon(eventos_valvula.get((c.gateway_zona, c.valvula), []), pasos) if c.conectada else None
-        auto = _escalon(eventos_auto.get(c.gateway_zona, []), pasos) if c.gateway_zona else None
+        valv = _escalon(eventos_valvula.get((c.gateway_zona, c.valvula), []), pasos_lectura) if c.conectada else None
+        auto = _escalon(eventos_auto.get(c.gateway_zona, []), pasos_lectura) if c.gateway_zona else None
         por_cama.append((c, valv, auto))
 
     lecturas = []
-    for paso in pasos:
+    for paso in pasos_lectura:
         amb = ambiente.get(paso)
         temps = suelo_paso.get(paso)
         en_linea = bool(amb) or paso in con_suelo
@@ -186,7 +228,16 @@ def lecturas_de(agrohub, camas, desde=None, hasta=None):
             }
         )
 
-    resultado = {**base, "sin_gateway": False, "lecturas": lecturas}
+    _rellenar(lecturas, tolerancia)
+    reales = [l["t"] for l in lecturas if not l["relleno"] and l["enLinea"]]
+    lecturas = lecturas[len(pasos_lectura) - len(pasos):]  # solo la ventana pedida
+    resultado = {
+        **base,
+        "sin_gateway": False,
+        "tolerancia_minutos": tolerancia * PASO_S // 60,
+        "ultimoDatoReal": reales[-1] if reales else None,
+        "lecturas": lecturas,
+    }
     cache.set(clave, resultado, CACHE_S)
     return resultado
 

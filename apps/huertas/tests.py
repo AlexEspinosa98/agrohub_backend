@@ -74,6 +74,33 @@ class BaseHuertas(TestCase):
             self.assertEqual(r.status_code, 201, r.content)
 
 
+class RellenoTests(TestCase):
+    def _paso(self, temp=None, hum=None, en_linea=False):
+        return {"t": 0, "temperatura": temp, "humedadAire": temp and 70, "temperaturaSuelo": None,
+                "enLinea": en_linea, "eras": [{"zona": "A", "humedad": hum, "riego": None, "auto": None}]}
+
+    def test_rellena_hasta_la_tolerancia_y_no_mas(self):
+        serie = [self._paso(30, 20, True)] + [self._paso() for _ in range(8)]
+        lecturas._rellenar(serie, tolerancia=6)  # 6 pasos = 3 horas
+        self.assertEqual([p["enLinea"] for p in serie], [True] * 7 + [False] * 2)
+        self.assertEqual([p["relleno"] for p in serie], [False] + [True] * 6 + [False] * 2)
+        self.assertEqual(serie[6]["eras"][0]["humedad"], 20)
+        self.assertEqual(serie[6]["minutosSinDato"], 180)
+        self.assertIsNone(serie[7]["temperatura"])  # pasada la tolerancia no se inventa
+
+    def test_completa_solo_lo_que_falta(self):
+        serie = [self._paso(30, 20, True), self._paso(31, None, True)]  # llegó el clima, no la sonda
+        lecturas._rellenar(serie, tolerancia=6)
+        self.assertEqual((serie[1]["temperatura"], serie[1]["eras"][0]["humedad"]), (31, 20))
+        self.assertTrue(serie[1]["relleno"])
+        self.assertEqual(serie[1]["minutosSinDato"], 0)
+
+    def test_sin_tolerancia_no_rellena(self):
+        serie = [self._paso(30, 20, True), self._paso()]
+        lecturas._rellenar(serie, tolerancia=0)
+        self.assertFalse(serie[1]["enLinea"])
+
+
 class CicloTests(TestCase):
     def setUp(self):
         self.tomate = Cultivo.objects.get(id="tomate").ficha_dict()
@@ -274,7 +301,7 @@ class LecturasTests(BaseHuertas):
         con_datos = [l for l in d["lecturas"] if l["enLinea"]]
         self.assertGreaterEqual(len(con_datos), 3)
         l = con_datos[-1]
-        self.assertEqual(set(l), {"t", "temperatura", "humedadAire", "temperaturaSuelo", "enLinea", "eras"})
+        self.assertEqual(set(l), {"t", "temperatura", "humedadAire", "temperaturaSuelo", "enLinea", "eras", "relleno", "minutosSinDato"})
         self.assertEqual([e["zona"] for e in l["eras"]], ["A", "B", "C"])
         self.assertIsNotNone(l["eras"][0]["humedad"])
         self.assertIsNone(l["eras"][2]["humedad"])  # la cama C no tiene sensor: no se inventa
@@ -289,6 +316,17 @@ class LecturasTests(BaseHuertas):
         viejas = [l for l in r.json()["data"]["lecturas"] if l["t"] < (_dt(300).timestamp() * 1000)]
         self.assertTrue(viejas)
         self.assertTrue(all(not l["enLinea"] and l["temperatura"] is None for l in viejas))
+
+    def test_huecos_cortos_repiten_el_ultimo_dato_marcado(self):
+        d = self.anonimo().get("/agrohubs/AH-002/lecturas", {"desde": int(_dt(180).timestamp() * 1000)}).json()["data"]
+        self.assertEqual(d["tolerancia_minutos"], 180)
+        self.assertIsNotNone(d["ultimoDatoReal"])
+        ultima = d["lecturas"][-1]
+        # El paso en curso aún no tiene lectura: repite la última medida, en línea y marcada
+        self.assertTrue(ultima["enLinea"])
+        self.assertIsNotNone(ultima["temperatura"])
+        self.assertIn("relleno", ultima)
+        self.assertIn("minutosSinDato", ultima)
 
     def test_ventana_maxima(self):
         r = self.anonimo().get("/agrohubs/AH-002/lecturas", {"desde": "2020-01-01"})

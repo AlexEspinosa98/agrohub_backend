@@ -121,7 +121,11 @@ La respuesta es el plan completo + `envio` + `movimientos_nuevos`. `envio.camas.
                "enLinea": true, "eras": [{"zona": "A", "humedad": 21.5, "riego": true, "auto": true}]}]}
 ```
 - Misma forma que `Lectura` (`simulacion.ts`), con `zona` en cada era.
-- **Sin dato es null**: paso sin lecturas → `enLinea: false` y todo en null; cama sin sensor →
+- **Zona rural:** si la estación mandó datos hace menos de `tolerancia_minutos` (180 por
+  defecto, `HUERTAS_TOLERANCIA_MINUTOS`), un paso sin lectura repite el último valor medido y sale
+  `enLinea: true`, `relleno: true` y `minutosSinDato`. `ultimoDatoReal` (ms) dice cuándo llegó la
+  última medición de verdad: úsalo para «Datos de hace…».
+- **Pasada la tolerancia, sin dato es null**: `enLinea: false` y todo en null; cama sin sensor →
   `humedad: null`; sin eventos de válvula → `riego: null`. Nada se interpola.
 - `desde`/`hasta`: ISO, `AAAA-MM-DD` o milisegundos. Por defecto los últimos 2 días; máximo 8.
 - Caché de 60 s y 120 consultas/min por IP. Nunca salen `device_id`, sensores ni temas MQTT.

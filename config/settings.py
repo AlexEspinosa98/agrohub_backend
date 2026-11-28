@@ -237,6 +237,9 @@ HUERTAS_ENVIAR_UMBRALES = os.getenv("HUERTAS_ENVIAR_UMBRALES", "false").lower() 
 HUERTAS_LLM_PROVEEDOR = os.getenv("HUERTAS_LLM_PROVEEDOR", "")
 HUERTAS_LLM_MODELO = os.getenv("HUERTAS_LLM_MODELO", "")
 HUERTAS_LLM_TOPE_USD_MES = float(os.getenv("HUERTAS_LLM_TOPE_USD_MES", "5"))
+# Zona rural: los gateways mandan a ratos. Dentro de esta ventana sin datos, las lecturas
+# abiertas repiten el último valor medido (marcado `relleno`) en vez de mostrar «sin señal».
+HUERTAS_TOLERANCIA_MINUTOS = int(os.getenv("HUERTAS_TOLERANCIA_MINUTOS", "180"))
 # Identidad única de AgroHub: secreto compartido con el backend de la red social para la API
 # interna /user-activity/identidad/* (ver apps/user_activity/identidad.py). Vacío = API apagada.
 IDENTIDAD_CLAVE = os.getenv("IDENTIDAD_CLAVE", "")
