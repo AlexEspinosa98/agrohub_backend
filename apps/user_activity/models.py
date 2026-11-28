@@ -38,10 +38,15 @@ class User(models.Model):
     """
 
     name = models.CharField(max_length=255)
-    phone = models.CharField(max_length=50, unique=True)
-    identification = models.CharField(max_length=50, unique=True)
-    email = models.CharField(max_length=255, null=True, blank=True)
+    # Identidad única de AgroHub (panel, bitácora, huertas y red social): se entra con teléfono,
+    # cédula o correo. Quien se registró desde la red social puede no tener teléfono ni cédula,
+    # y quien se registró en el panel puede no tener correo; cada uno, si está, es único.
+    phone = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    identification = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    email = models.CharField(max_length=255, unique=True, null=True, blank=True)
     password_hash = models.CharField(max_length=255)
+    # Contraseña de la red social de quien tenía cuenta en los dos lados (ver contrasenas.py).
+    password_hash_alt = models.CharField(max_length=255, null=True, blank=True)
     association = models.ForeignKey(
         Association,
         null=True,

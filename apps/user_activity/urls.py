@@ -1,8 +1,13 @@
 from django.urls import path
 
-from apps.user_activity import views
+from apps.user_activity import identidad, views
 
 urlpatterns = [
+    # Identidad única (solo servidor a servidor: la red social, con X-Identidad-Clave)
+    path("identidad/verificar", identidad.verificar, name="identidad_verificar"),
+    path("identidad/registrar", identidad.registrar, name="identidad_registrar"),
+    path("identidad/usuarios/<int:user_id>", identidad.usuario, name="identidad_usuario"),
+    path("identidad/usuarios/<int:user_id>/contrasena", identidad.contrasena, name="identidad_contrasena"),
     path("associations", views.AssociationListCreateView.as_view(), name="associations"),
     path("associations/<int:association_id>", views.AssociationDetailView.as_view(), name="association_detail"),
     path("users/register", views.register_user, name="register_user"),

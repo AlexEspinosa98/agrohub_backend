@@ -90,12 +90,7 @@ def _err(detail_example="mensaje de error"):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def hash_password(raw: str) -> str:
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-
-def verify_password(raw: str, hashed: str) -> bool:
-    return hash_password(raw) == hashed
+from apps.user_activity.contrasenas import hash_password, sha256, verificar_usuario, verify_password  # noqa: E402,F401
 
 
 def generate_otp() -> str:
@@ -106,8 +101,17 @@ _OTP_TTL_MINUTES = 10
 _OTP_COOLDOWN_SECONDS = 60
 
 
+def normalizar_email(value):
+    value = (value or "").strip().lower()
+    return value or None
+
+
 def _find_user_by_login(value: str):
-    return User.objects.filter(Q(phone=value) | Q(identification=value) | Q(email=value)).first()
+    """Teléfono, cédula o correo (el correo sin importar mayúsculas)."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    return User.objects.filter(Q(phone=value) | Q(identification=value) | Q(email__iexact=value)).first()
 
 
 def _serialize_association(a: Association) -> dict:
@@ -337,18 +341,36 @@ def register_user(request):
     data = serializer.validated_data
     if data.get("association_id") and not Association.objects.filter(id=data["association_id"]).exists():
         raise NotFound("Asociación no encontrada")
+    email = normalizar_email(data.get("email"))
+    existente = User.objects.filter(email__iexact=email).first() if email else None
+    if existente and not existente.phone and not existente.identification:
+        # Cuenta creada desde la red social: si la contraseña es la misma, se completa con
+        # teléfono y cédula (es la misma persona y la misma cuenta).
+        if not verificar_usuario(existente, data["password"]):
+            raise ParseError("Ya existe una cuenta AgroHub con este correo. Inicia sesión con esa contraseña.")
+        existente.phone, existente.identification = data["phone"], data["identification"]
+        if data.get("association_id"):
+            existente.association_id = data["association_id"]
+        try:
+            existente.save(update_fields=["phone", "identification", "association_id"])
+        except IntegrityError as exc:
+            raise ParseError("Teléfono o identificación ya registrados") from exc
+        return Response(
+            {"status": status.HTTP_201_CREATED, "message": "usuario creado", "data": None},
+            status=status.HTTP_201_CREATED,
+        )
     try:
         User.objects.create(
             name=data["name"],
             phone=data["phone"],
             identification=data["identification"],
-            email=data.get("email"),
+            email=email,
             password_hash=hash_password(data["password"]),
             association_id=data.get("association_id"),
             role="user",
         )
     except IntegrityError as exc:
-        raise ParseError("Teléfono o identificación ya registrados") from exc
+        raise ParseError("Teléfono, identificación o correo ya registrados") from exc
     return Response(
         {"status": status.HTTP_201_CREATED, "message": "usuario creado", "data": None},
         status=status.HTTP_201_CREATED,
@@ -381,7 +403,7 @@ def create_superadmin(request):
             name=data["name"],
             phone=data["phone"],
             identification=data["identification"],
-            email=data.get("email"),
+            email=normalizar_email(data.get("email")),
             password_hash=hash_password(data["password"]),
             association_id=data.get("association_id"),
             role="superadmin",
@@ -487,6 +509,8 @@ class UserDetailView(APIView):
             raise NotFound("Usuario no encontrado")
         if not data:
             raise ParseError("Nada para actualizar")
+        if "email" in data:
+            data["email"] = normalizar_email(data["email"])
         try:
             for key, value in data.items():
                 setattr(user, key, value)
@@ -521,7 +545,7 @@ def admin_create_user(request):
             name=data["name"],
             phone=data["phone"],
             identification=data["identification"],
-            email=data.get("email"),
+            email=normalizar_email(data.get("email")),
             password_hash=hash_password(data["password"]),
             association_id=data.get("association_id"),
             role=data.get("role", "user"),
@@ -558,7 +582,7 @@ def login(request):
     serializer.is_valid(raise_exception=True)
     data = serializer.validated_data
     user = _find_user_by_login(data["phone_or_identification"])
-    if not user or not verify_password(data["password"], user.password_hash):
+    if not user or not verificar_usuario(user, data["password"]):
         return Response({"detail": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
     token = str(uuid.uuid4())
     platform = data.get("platform")
@@ -626,7 +650,7 @@ def forgot_password(request):
             raise Throttled(detail="Espera un momento antes de solicitar otro código")
 
     otp = generate_otp()
-    user.reset_otp_hash = hash_password(otp)
+    user.reset_otp_hash = sha256(otp)
     user.reset_otp_expires_at = timezone.now() + timedelta(minutes=_OTP_TTL_MINUTES)
     user.save(update_fields=["reset_otp_hash", "reset_otp_expires_at"])
     try:
@@ -656,14 +680,15 @@ def reset_password(request):
         and user.reset_otp_hash
         and user.reset_otp_expires_at
         and timezone.now() <= user.reset_otp_expires_at
-        and hash_password(data["otp"]) == user.reset_otp_hash
+        and sha256(data["otp"]) == user.reset_otp_hash
     )
     if not otp_ok:
         raise ParseError("Código inválido o expirado")
     user.password_hash = hash_password(data["new_password"])
+    user.password_hash_alt = None
     user.reset_otp_hash = None
     user.reset_otp_expires_at = None
-    user.save(update_fields=["password_hash", "reset_otp_hash", "reset_otp_expires_at"])
+    user.save(update_fields=["password_hash", "password_hash_alt", "reset_otp_hash", "reset_otp_expires_at"])
     Session.objects.filter(user=user).delete()
     return Response({"status": status.HTTP_200_OK, "message": "contraseña actualizada", "data": None})
 

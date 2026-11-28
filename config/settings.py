@@ -237,6 +237,17 @@ HUERTAS_ENVIAR_UMBRALES = os.getenv("HUERTAS_ENVIAR_UMBRALES", "false").lower() 
 HUERTAS_LLM_PROVEEDOR = os.getenv("HUERTAS_LLM_PROVEEDOR", "")
 HUERTAS_LLM_MODELO = os.getenv("HUERTAS_LLM_MODELO", "")
 HUERTAS_LLM_TOPE_USD_MES = float(os.getenv("HUERTAS_LLM_TOPE_USD_MES", "5"))
+# Identidad única de AgroHub: secreto compartido con el backend de la red social para la API
+# interna /user-activity/identidad/* (ver apps/user_activity/identidad.py). Vacío = API apagada.
+IDENTIDAD_CLAVE = os.getenv("IDENTIDAD_CLAVE", "")
+# Contraseñas nuevas en Argon2id (el mismo formato de la red social). Las SHA-256 heredadas se
+# siguen aceptando y se convierten solas al iniciar sesión (apps/user_activity/contrasenas.py).
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.ScryptPasswordHasher",
+]
 # Origen público del backend: los archivos que se le entregan a otro dominio (el front de Huertas
 # abiertas pinta la foto de un reporte con <img>) van con la URL completa, no relativa a MEDIA_URL.
 PUBLIC_BACKEND_ORIGIN = os.getenv("PUBLIC_BACKEND_ORIGIN", "https://back.alunaia.co").rstrip("/")

@@ -17,3 +17,4 @@ paddleocr>=3.7,<4
 psycopg2-binary>=2.9,<3
 drf-spectacular==0.30.0
 paho-mqtt==2.1.0
+argon2-cffi>=23.1,<26
