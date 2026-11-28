@@ -103,3 +103,10 @@ class IdentidadTests(TestCase):
         # La persona que solo estaba en la red social entra al panel con su contraseña de siempre
         r = self.c.post("/user-activity/users/login", {"phone_or_identification": "solo.red@ejemplo.co", "password": "de-la-red"}, format="json")
         self.assertEqual(r.status_code, 200)
+
+    def test_persona_incluye_municipio_de_su_asociacion(self):
+        from apps.user_activity.models import Association
+        self.vieja.association = Association.objects.create(name="ASOCAD", municipality="Aracataca")
+        self.vieja.save()
+        r = self.post("verificar", {"identificador": "1010", "password": "vieja-123"})
+        self.assertEqual(r.json()["data"]["municipio"], "Aracataca")

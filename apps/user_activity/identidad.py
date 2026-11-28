@@ -44,6 +44,8 @@ def persona(u: User) -> dict:
         "phone": u.phone,
         "identification": u.identification,
         "role": u.role or "user",
+        # La red social lo usa para unir a la persona a la comunidad de su municipio al entrar
+        "municipio": (u.association.municipality if u.association_id and u.association else None),
     }
 
 
