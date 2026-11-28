@@ -584,25 +584,18 @@ def login(request):
     user = _find_user_by_login(data["phone_or_identification"])
     if not user or not verificar_usuario(user, data["password"]):
         return Response({"detail": "Credenciales inválidas"}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response({"status": status.HTTP_200_OK, "message": "login ok", "data": abrir_sesion(user, data.get("platform"))})
+
+
+def abrir_sesion(user, platform=None) -> dict:
+    """Crea una sesión del panel y devuelve lo mismo que el login (token, rol, nombre, correo)."""
     token = str(uuid.uuid4())
-    platform = data.get("platform")
     # Varios dispositivos a la vez: un login nuevo NO cierra las sesiones existentes. Solo se poda
     # lo más viejo para que la tabla no crezca sin límite.
     Session.objects.create(user=user, token=token, platform=platform)
     antiguas = Session.objects.filter(user=user).order_by("-last_used_at", "-id").values_list("id", flat=True)[MAX_SESIONES_POR_USUARIO:]
     Session.objects.filter(id__in=list(antiguas)).delete()
-    return Response(
-        {
-            "status": status.HTTP_200_OK,
-            "message": "login ok",
-            "data": {
-                "token": token,
-                "role": user.role or "user",
-                "name": user.name,
-                "email": user.email,
-            },
-        }
-    )
+    return {"token": token, "role": user.role or "user", "name": user.name, "email": user.email}
 
 
 @extend_schema(

@@ -110,3 +110,20 @@ class IdentidadTests(TestCase):
         self.vieja.save()
         r = self.post("verificar", {"identificador": "1010", "password": "vieja-123"})
         self.assertEqual(r.json()["data"]["municipio"], "Aracataca")
+
+    def test_entrar_a_un_lado_sin_volver_a_escribir_la_contrasena(self):
+        login = self.c.post("/user-activity/users/login", {"phone_or_identification": "1010", "password": "vieja-123"}, format="json")
+        token = login.json()["data"]["token"]
+        # Panel → red social: el panel firma un ticket que la red social canjea con la clave
+        self.assertEqual(self.c.post("/user-activity/identidad/ticket").status_code, 401)
+        r = self.c.post("/user-activity/identidad/ticket", HTTP_AUTHORIZATION=f"Token {token}")
+        ticket = r.json()["data"]["ticket"]
+        self.assertEqual(self.post("canjear", {"ticket": ticket}, clave="otra").status_code, 403)
+        self.assertEqual(self.post("canjear", {"ticket": ticket + "x"}).status_code, 401)
+        self.assertEqual(self.post("canjear", {"ticket": ticket}).json()["data"]["id"], self.vieja.id)
+        # Red social → panel: sesión del panel para una persona ya autenticada allá
+        r = self.post(f"usuarios/{self.vieja.id}/sesion", {})
+        nuevo = r.json()["data"]["token"]
+        self.assertNotEqual(nuevo, token)
+        self.assertEqual(self.c.post("/user-activity/identidad/ticket", HTTP_AUTHORIZATION=f"Token {nuevo}").status_code, 200)
+        self.assertEqual(self.post("usuarios/999999/sesion", {}).status_code, 404)

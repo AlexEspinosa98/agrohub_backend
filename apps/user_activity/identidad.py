@@ -12,8 +12,20 @@ servidor (secreto compartido entre los dos backends). Sin esa variable, todo res
     POST /user-activity/identidad/registrar            {email, password, name}  → 201 creada | 200 ya era suya | 409
     POST /user-activity/identidad/usuarios/<id>/contrasena  {password}           → 200
     GET  /user-activity/identidad/usuarios/<id>                                  → 200 persona
+    POST /user-activity/identidad/usuarios/<id>/sesion                           → 200 sesión del panel
+    POST /user-activity/identidad/canjear              {ticket}                  → 200 persona | 401
+
+Y una ruta para el propio panel (con `Authorization: Token <sesión del panel>`, sin la clave):
+
+    POST /user-activity/identidad/ticket                                         → 200 {ticket}
+
+Con esas tres, quien ya inició sesión en un lado entra al otro sin volver a escribir la
+contraseña: el panel firma un ticket de 2 minutos que la red social canjea aquí; y la red social
+pide una sesión del panel para la persona que ya autenticó con su propio JWT.
 """
 import hmac
+
+from django.core import signing
 
 from django.conf import settings
 from django.db import IntegrityError
@@ -23,6 +35,7 @@ from rest_framework.exceptions import NotFound
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 
+from apps.user_activity.authentication import TokenHeaderAuthentication
 from apps.user_activity.contrasenas import hash_password, verificar_usuario
 from apps.user_activity.models import User
 
@@ -132,3 +145,43 @@ def contrasena(request, user_id: int):
     u.password_hash_alt = None
     u.save(update_fields=["password_hash", "password_hash_alt"])
     return Response({"status": 200, "message": "contraseña actualizada", "data": persona(u)})
+
+
+TICKET_SAL = "agrohub-identidad-ticket"
+TICKET_SEGUNDOS = 120
+
+
+@api_view(["POST"])
+@authentication_classes([TokenHeaderAuthentication])
+@permission_classes([])
+def ticket(request):
+    if not request.user.is_authenticated:
+        return Response({"detail": "Inicia sesión en el panel"}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response({"status": 200, "message": "ok", "data": {
+        "ticket": signing.dumps({"u": request.user.id}, salt=TICKET_SAL),
+        "segundos": TICKET_SEGUNDOS,
+    }})
+
+
+@api_view(["POST"])
+@authentication_classes(_DECORADORES["auth"])
+@permission_classes(_DECORADORES["perms"])
+def canjear(request):
+    try:
+        datos = signing.loads(str(request.data.get("ticket") or ""), salt=TICKET_SAL, max_age=TICKET_SEGUNDOS)
+        u = User.objects.get(id=int(datos["u"]))
+    except (signing.BadSignature, KeyError, TypeError, ValueError, User.DoesNotExist):
+        return Response({"detail": "Ticket inválido o vencido"}, status=status.HTTP_401_UNAUTHORIZED)
+    return Response({"status": 200, "message": "ok", "data": persona(u)})
+
+
+@api_view(["POST"])
+@authentication_classes(_DECORADORES["auth"])
+@permission_classes(_DECORADORES["perms"])
+def sesion(request, user_id: int):
+    from apps.user_activity.views import abrir_sesion
+
+    u = User.objects.filter(id=user_id).first()
+    if u is None:
+        raise NotFound()
+    return Response({"status": 200, "message": "login ok", "data": abrir_sesion(u, "red-social")})
