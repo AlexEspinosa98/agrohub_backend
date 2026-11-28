@@ -1,7 +1,27 @@
 # Plan: identidad y roles unificados de AgroHub
 
-Estado: **borrador para validar**. No hay nada implementado. Los puntos marcados **[por definir]**
-los confirma Alexander a medida que da el contexto.
+Estado: **identidad única en producción desde el 28 nov 2026** (ver sección 0). Los roles nuevos
+y los permisos por módulo (fases 1 y 3) siguen pendientes; los puntos **[por definir]** los
+confirma Alexander a medida que da el contexto.
+
+## 0. Lo que ya está hecho (28 nov 2026)
+
+Una persona = una cuenta: el mismo usuario y la misma contraseña en el panel, la bitácora,
+Huertas abiertas y la red social. Si se registra en un lado, entra en el otro.
+
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| Tabla única de personas | `users` (MySQL) de este backend | Teléfono, cédula y correo opcionales pero únicos; se entra con cualquiera de los tres |
+| Contraseñas | `apps/user_activity/contrasenas.py` | Argon2id; las SHA-256 heredadas se aceptan y se convierten solas al iniciar sesión |
+| API interna | `/user-activity/identidad/*` (`identidad.py`) | verificar, registrar, cambiar contraseña; solo con `X-Identidad-Clave` (`IDENTIDAD_CLAVE` en `.env`) |
+| Red social | `apps/accounts/backends.py` + `identidad.py` (repo `josefcc96/agrohub`, commit local `61a10ef` en el servidor) | Login por correo, teléfono o cédula validado contra la identidad; `User.identity_id`; registro y cambios de contraseña van a la identidad; si la identidad no responde, sigue con su hash local |
+| Migración | `manage.py identidad_importar` | 89 cuentas activas de la red social: 82 creadas y 7 enlazadas por correo (esas 7 entran con cualquiera de sus dos contraseñas hasta su primer inicio de sesión) |
+
+Respaldos previos y el parche para el repo de la red social: `~/backups/unificacion_20261128_0145/`
+en el servidor. El código de la red social no se pudo subir a GitHub (repositorio privado sin
+acceso desde aquí): su dueño debe aplicar `0001-feat-accounts-identidad-nica-de-AgroHub-misma-cuenta.patch`
+para que un `git pull` futuro no lo pierda.
+
 
 ## 1. Punto de partida (verificado en el servidor)
 
