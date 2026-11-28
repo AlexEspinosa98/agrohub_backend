@@ -127,3 +127,18 @@ class IdentidadTests(TestCase):
         self.assertNotEqual(nuevo, token)
         self.assertEqual(self.c.post("/user-activity/identidad/ticket", HTTP_AUTHORIZATION=f"Token {nuevo}").status_code, 200)
         self.assertEqual(self.post("usuarios/999999/sesion", {}).status_code, 404)
+
+    def test_cuenta_nueva_por_cualquier_lado_escribe_en_la_bitacora(self):
+        # Nació en la red social (solo correo) y otra nació en el registro del panel
+        self.post("registrar", {"email": "red2@ejemplo.co", "password": "Segura-2026!", "name": "Red"})
+        self.c.post("/user-activity/users/register", {
+            "name": "Panel", "phone": "3005550000", "identification": "5050", "password": "Segura-2026!",
+        }, format="json")
+        for ident in ("red2@ejemplo.co", "3005550000"):
+            login = self.c.post("/user-activity/users/login", {"phone_or_identification": ident, "password": "Segura-2026!"}, format="json")
+            self.assertEqual(login.status_code, 200, login.content)
+            token = login.json()["data"]["token"]
+            r = self.c.post("/user-activity/logbooks", {
+                "title": "Siembra", "description": "Sembré yuca", "activity_date": "2026-11-28",
+            }, format="json", HTTP_AUTHORIZATION=f"Token {token}")
+            self.assertEqual(r.status_code, 201, r.content)
