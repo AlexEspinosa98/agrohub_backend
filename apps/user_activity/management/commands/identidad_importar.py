@@ -11,7 +11,8 @@ Reglas:
   su primer inicio de sesión);
 - correo nuevo → se crea la persona con la contraseña de la red social tal cual (mismo formato
   Argon2 de Django), rol user, sin teléfono ni cédula;
-- cuentas purgadas en la red social → se saltan.
+- solo se importan cuentas activas: las borradas, suspendidas o purgadas en la red social se
+  saltan (no deben ganar acceso al panel por la importación).
 Es idempotente: correrlo dos veces no duplica a nadie.
 
     python manage.py identidad_importar export.json [--salida mapa.json] [--aplicar]
@@ -41,7 +42,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             for f in filas:
                 email = (f.get("email") or "").strip().lower()
-                if not email or f.get("estado") == "purged" or not f.get("password"):
+                if not email or (f.get("estado") or "active") != "active" or not f.get("password"):
                     cuenta["saltada"] += 1
                     continue
                 u = User.objects.filter(email__iexact=email).first()

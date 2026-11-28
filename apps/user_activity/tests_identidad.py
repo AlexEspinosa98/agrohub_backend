@@ -82,6 +82,7 @@ class IdentidadTests(TestCase):
             {"social_id": "u-1", "email": "ana@ejemplo.co", "nombre": "Ana", "password": social_hash, "estado": "active"},
             {"social_id": "u-2", "email": "solo.red@ejemplo.co", "nombre": "Solo Red", "password": social_hash, "estado": "active"},
             {"social_id": "u-3", "email": "borrado@ejemplo.co", "nombre": "B", "password": social_hash, "estado": "purged"},
+            {"social_id": "u-4", "email": "en.borrado@ejemplo.co", "nombre": "C", "password": social_hash, "estado": "deleted"},
         ]
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
             json.dump(filas, f)
@@ -93,6 +94,8 @@ class IdentidadTests(TestCase):
         mapa = {m["social_id"]: m for m in json.load(open(salida))}
         self.assertEqual(mapa["u-1"]["identity_id"], self.vieja.id)
         self.assertNotIn("u-3", mapa)
+        self.assertNotIn("u-4", mapa)
+        self.assertFalse(User.objects.filter(email="en.borrado@ejemplo.co").exists())
         self.assertEqual(User.objects.filter(email="solo.red@ejemplo.co").count(), 1)
         # Ana entra con cualquiera de las dos hasta el primer login; luego queda la que usó
         self.assertEqual(self.post("verificar", {"identificador": "ana@ejemplo.co", "password": "de-la-red"}).status_code, 200)
